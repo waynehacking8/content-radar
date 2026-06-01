@@ -55,7 +55,36 @@ def relevant_items(items: list[Item], question: str, k: int = 20) -> list[Item]:
     return (hits or ranked)[:k]
 
 
-def recent_digests(digests_dir: Path, n: int = 2) -> str:
+def _fetch_url(url: str, timeout: int = 4) -> str | None:
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310 (fixed scheme)
+            if getattr(resp, "status", 200) == 200:
+                return resp.read().decode("utf-8")
+    except Exception:  # noqa: BLE001 - network best-effort; fall back to disk
+        return None
+    return None
+
+
+def recent_digests(digests_dir: Path, n: int = 2, *, raw_base: str | None = None,
+                   today: _dt.date | None = None) -> str:
+    """The latest n digests for recency framing.
+
+    Prefers the live repo over HTTP (raw GitHub) so a freshly-committed digest is
+    visible within the CDN window (~5 min), not after the bot's 6-hourly restart.
+    Falls back to local disk when HTTP is disabled/unreachable.
+    """
+    raw_base = config.digest_raw_base() if raw_base is None else raw_base
+    if raw_base:
+        today = today or _dt.date.today()
+        texts = []
+        for delta in range(n):
+            day = today - _dt.timedelta(days=delta)
+            md = _fetch_url(f"{raw_base.rstrip('/')}/digest-{day.isoformat()}.md")
+            if md:
+                texts.append(md)
+        if texts:
+            return "\n\n".join(texts)
     files = sorted(Path(digests_dir).glob("digest-*.md"), reverse=True)[:n]
     return "\n\n".join(f.read_text(encoding="utf-8") for f in files)
 

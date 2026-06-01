@@ -89,6 +89,17 @@ def digest_email_to() -> str:
     return os.environ.get("DIGEST_EMAIL_TO", DEFAULT_DIGEST_EMAIL_TO).strip() or DEFAULT_DIGEST_EMAIL_TO
 
 
+# Where the chat bot reads the latest digest from. Fetching over HTTP (raw
+# GitHub) makes "today's digest" live — the bot sees a new digest within the
+# CDN cache window (~5 min) instead of waiting for its next 6-hourly restart to
+# re-checkout the repo. Set DIGEST_RAW_BASE="" to force the local-disk path.
+DEFAULT_DIGEST_RAW_BASE = "https://raw.githubusercontent.com/waynehacking8/content-radar/main/digests"
+
+
+def digest_raw_base() -> str:
+    return os.environ.get("DIGEST_RAW_BASE", DEFAULT_DIGEST_RAW_BASE).strip()
+
+
 # Synthesis model. Alias ("sonnet"/"opus"/"haiku") is most portable for the
 # `claude` CLI; override with SYNTH_MODEL for a specific version.
 def synth_model() -> str:

@@ -1,7 +1,33 @@
 import datetime as dt
 
-from content_radar.chat import build_chat_prompt, relevant_items
+import content_radar.chat as chat_mod
+from content_radar.chat import build_chat_prompt, recent_digests, relevant_items
 from content_radar.models import Item
+
+
+def test_recent_digests_prefers_live_http(monkeypatch, tmp_path):
+    # local disk has an OLD digest; HTTP returns today's -> HTTP wins
+    (tmp_path / "digest-2026-05-01.md").write_text("OLD LOCAL", encoding="utf-8")
+    monkeypatch.setattr(chat_mod, "_fetch_url",
+                        lambda url, timeout=4: "LIVE TODAY" if "2026-06-01" in url else None)
+    out = recent_digests(tmp_path, n=2, raw_base="http://repo/digests",
+                         today=dt.date(2026, 6, 1))
+    assert "LIVE TODAY" in out
+    assert "OLD LOCAL" not in out
+
+
+def test_recent_digests_falls_back_to_disk_when_http_unreachable(monkeypatch, tmp_path):
+    (tmp_path / "digest-2026-06-01.md").write_text("DISK COPY", encoding="utf-8")
+    monkeypatch.setattr(chat_mod, "_fetch_url", lambda url, timeout=4: None)  # all 404/offline
+    out = recent_digests(tmp_path, n=2, raw_base="http://repo/digests",
+                         today=dt.date(2026, 6, 1))
+    assert out == "DISK COPY"
+
+
+def test_recent_digests_uses_disk_when_raw_base_disabled(tmp_path):
+    (tmp_path / "digest-2026-06-01.md").write_text("DISK ONLY", encoding="utf-8")
+    out = recent_digests(tmp_path, n=1, raw_base="")  # HTTP disabled
+    assert out == "DISK ONLY"
 
 
 def _item(id_, title, score=10, text=""):
