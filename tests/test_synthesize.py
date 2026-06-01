@@ -1,7 +1,40 @@
 import datetime as dt
 
 from content_radar.models import Item
-from content_radar.synthesize import _extract_json, build_prompt, write_drafts
+from content_radar import synthesize
+from content_radar.synthesize import _extract_json, _result_text, build_prompt, write_drafts
+
+
+def test_run_claude_cli_always_constrains_tools(monkeypatch):
+    captured = {}
+
+    class FakeProc:
+        returncode = 0
+        stdout = '{"result": "ok"}'
+        stderr = ""
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return FakeProc()
+
+    monkeypatch.setattr(synthesize.subprocess, "run", fake_run)
+
+    # no tools requested -> still passes --allowedTools with an empty value
+    synthesize.run_claude_cli("hi", "sonnet")
+    cmd = captured["cmd"]
+    assert "--allowedTools" in cmd
+    assert cmd[cmd.index("--allowedTools") + 1] == ""
+
+    # WebSearch requested -> passes it through
+    synthesize.run_claude_cli("hi", "sonnet", allowed_tools=["WebSearch"])
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("--allowedTools") + 1] == "WebSearch"
+
+
+def test_result_text_recovers_result_from_stream_json():
+    # if the CLI ever emits stream-json (one object per line), still recover result
+    stream = '{"type":"assistant","message":{}}\n{"type":"result","result":"final answer"}'
+    assert _result_text(stream) == "final answer"
 
 
 def test_extract_json_handles_fenced_blocks():

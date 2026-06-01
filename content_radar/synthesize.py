@@ -71,14 +71,30 @@ def claude_cli_available() -> bool:
 
 
 def _result_text(stdout: str) -> str:
-    """Pull the model's text out of `claude --output-format json` (or pass through)."""
+    """Pull the model's text out of `claude --output-format json`.
+
+    Handles a single result object, and defensively the stream-json case (one
+    JSON per line) by scanning for the final object that carries `result`.
+    """
     out = stdout.strip()
     try:
         obj = json.loads(out)
-    except json.JSONDecodeError:
+        if isinstance(obj, dict) and "result" in obj:
+            return obj["result"]
         return out
-    if isinstance(obj, dict) and "result" in obj:
-        return obj["result"]
+    except json.JSONDecodeError:
+        pass
+    # stream-json fallback: find the last line whose JSON has a "result"
+    for line in reversed(out.splitlines()):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict) and obj.get("result"):
+            return obj["result"]
     return out
 
 
@@ -91,13 +107,14 @@ def run_claude_cli(prompt: str, model: str, timeout: int = 300,
     (generate one with `claude setup-token`).
 
     allowed_tools enables agentic tools (e.g. ["WebSearch"]) so the model can
-    fill knowledge-base gaps from the live web; omit for a pure, fast one-shot.
+    fill knowledge-base gaps from the live web. It defaults to NONE: we always
+    pass --allowedTools (empty = no tools) so a pure-generation call can never
+    wander off into Task/Read/Bash and touch local files or break the output.
     """
     cmd = ["claude", "-p", "--output-format", "json"]
     if model:
         cmd += ["--model", model]
-    if allowed_tools:
-        cmd += ["--allowedTools", ",".join(allowed_tools)]
+    cmd += ["--allowedTools", ",".join(allowed_tools or [])]  # empty = no tools
     proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=timeout)
     if proc.returncode != 0:
         detail = (proc.stderr.strip() or proc.stdout.strip() or "no output")[:600]
