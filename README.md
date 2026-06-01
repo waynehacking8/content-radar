@@ -1,16 +1,29 @@
 # content-radar
 
-Collect trending **AI / dev** signal from multiple sources, then synthesize
-**review-ready post drafts** with Claude. Built for practitioners who want their
-posts to ride current topics without hand-trawling five feeds every morning.
+Collect trending **AI / dev** signal from multiple sources, build a **vector
+knowledge base** from it, and serve three things off that KB: an AINews-style
+daily **digest**, review-ready post **drafts**, and a **Traditional-Chinese chat
+bot** — all synthesised with Claude on your subscription (no API key).
 
 ```
-collectors ──▶ dated JSON store (dedup) ──▶ Claude synthesis ──▶ draft .md files
- HN · arXiv · GitHub Trending · Reddit · X                         (you review & post)
+                                            ┌──▶ daily thematic digest (.md)
+collectors ──▶ dated JSON store (dedup) ──▶ │
+ HN·arXiv·GitHub·Reddit·X·Gmail(AINews)     ├──▶ post drafts (.md, status: draft)
+        │                                   │
+        └──▶ enrich (full text) ──▶ Qdrant  ├──▶ Telegram chat bot (繁中, RAG + WebSearch)
+             vector KB (e5 + BM25 + rerank) │
+                                            └──▶ daily AINews → 繁中 email
 ```
 
-Nothing is ever auto-published. The output is **drafts** (`status: draft`) for a
-human to approve — pairs naturally with a review-gated posting queue.
+Two model layers: **retrieval runs locally for free** (fastembed: e5-large dense +
+BM25 sparse + jina cross-encoder rerank, vectors in Qdrant Cloud); **all generation
+runs on Claude Sonnet** via the `claude` CLI subscription. Nothing is ever
+auto-published — posts are **drafts** (`status: draft`) for a human to approve.
+
+**Each day's collected signal is embedded and upserted into the KB automatically**
+(the `index` step in the daily workflow), so the knowledge base grows every day and
+the bot/digest always see the latest news. Re-runs are idempotent (deterministic
+point IDs dedup).
 
 ## Why these sources
 
@@ -24,7 +37,8 @@ For an LLM-infra / agentic-AI niche, the highest-signal trends surface first on
 
 ```bash
 python3 -m pip install -r requirements.txt
-cp .env.example .env     # add ANTHROPIC_API_KEY (and optionally TWITTERAPI_IO_KEY)
+cp .env.example .env     # generation uses your `claude` CLI login — no API key.
+                         # add QDRANT_URL/_API_KEY for the KB, GMAIL_* for AINews + email.
 ```
 
 ## Use
@@ -160,19 +174,27 @@ min_score        = {"hackernews": 20, "reddit": 50, "github": 25, ...}
 content_radar/
   models.py            # immutable Item
   store.py             # dated JSON store + dedup (idempotent re-runs)
-  config.py            # interests (keywords, x_accounts, subreddits...) + secrets
+  config.py            # interests + secrets + synth_model / web_fallback / email toggles
   collectors/
     hackernews.py      # Algolia API (free)
     arxiv.py           # export API (free)
     github_trending.py # trending page parse (free)
     reddit.py          # OAuth or public JSON (free)
-    x_twitterapi.py    # twitterapi.io: keyword search + curated account timelines
+    x_twitterapi.py    # twitterapi.io: keyword search + curated account timelines (opt-in)
     discord_collector.py # official Bot REST API (opt-in; no self-bots)
-  enrich.py            # Phase 3: fetch + attach linked-article text
-  digest.py            # Phase 2/4: thematic clustering + best-of-N editorial pick
-  synthesize.py        # Claude backend (subscription CLI) -> draft posts
-  cli.py               # collect / show / digest / synthesize
-tests/                 # 16 tests; gate, store, digest, enrich (python -m pytest)
+    gmail_imap.py      # fold AINews (& other newsletters) from your inbox via IMAP
+  enrich.py            # fetch + attach linked-article text (detailed KB)
+  chunk.py             # sentence-aware chunking, no overlap
+  rag.py               # KB: contextual chunks + hybrid (e5 dense + BM25) + jina rerank → Qdrant
+  kb.py                # local SQLite FTS fallback when Qdrant isn't configured
+  digest.py            # thematic clustering + best-of-N pick; + full 繁中 newsletter translation
+  synthesize.py        # claude CLI backend (subscription; tools off by default)
+  chat.py              # RAG chat: retrieve → answer in 繁中, WebSearch fallback on KB gaps
+  telegram_bot.py      # long-poll Telegram bot over chat.py (serverless, no own host)
+  mailer.py            # Gmail SMTP: daily 繁中 AINews edition
+  eval_qa.py           # LLM-as-judge QA harness (generate questions, score answers)
+  cli.py               # collect / show / enrich / index / import / digest / synthesize / email-digest / eval
+tests/                 # 47 tests (python -m pytest)
 ```
 
 ### How it matches AINews
@@ -180,9 +202,11 @@ tests/                 # 16 tests; gate, store, digest, enrich (python -m pytest
 | AINews technique | content-radar |
 |---|---|
 | Breadth: Twitter accounts + Reddit + Discord | `x_accounts` timelines, Reddit OAuth, Discord bot |
-| Click through links and summarise them | `enrich.py` (Phase 3) |
-| Cluster into themes with attribution | `digest.py` (Phase 2) |
-| Run N pipelines, pick the best | `--best-of N` (Phase 4) |
+| Click through links and summarise them | `enrich.py` (full article text) |
+| Cluster into themes with attribution | `digest.py` |
+| Run N pipelines, pick the best | `--best-of N` |
+| Searchable archive of every past issue | **Qdrant vector KB** (`rag.py`) — every day's signal auto-indexed |
+| Ask it anything, grounded | **繁中 chat bot** (`chat.py` + `telegram_bot.py`), RAG + WebSearch fallback |
 | Daily, automated | GitHub Actions on your subscription |
 
 ## Design notes
@@ -192,6 +216,12 @@ tests/                 # 16 tests; gate, store, digest, enrich (python -m pytest
 - **Idempotent store.** Re-collecting the same day dedups by `source:id` and
   keeps the higher score.
 - **Human in the loop by construction.** Synthesis only ever writes `draft`s.
+- **The KB grows by itself.** Each daily run embeds that day's signal (incl. the
+  day's AINews) into Qdrant; deterministic point IDs make re-indexing idempotent.
+- **Two cost layers.** Retrieval (fastembed + Qdrant free tier) is local and free;
+  only Claude generation uses your subscription. No per-token API billing.
+- **Tools off by default.** Generation calls run with no agent tools so they can't
+  touch the filesystem; only the chat bot's KB-gap path opts into WebSearch.
 
 ## License
 
