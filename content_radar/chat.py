@@ -54,26 +54,29 @@ def recent_digests(digests_dir: Path, n: int = 2) -> str:
 
 
 def build_chat_prompt(question: str, items: list[Item], digest_text: str) -> str:
-    ctx = "\n".join(
-        f"- [{i.source} · {i.created or 'n/a'}] {i.title}\n  {i.url}\n  {(i.text or '')[:300]}"
+    # Context engineering: full chunk text (no truncation), most relevant first,
+    # each tagged with source + date. The long-context model handles it.
+    ctx = "\n\n".join(
+        f"[{i.source} · {i.created or 'n/a'}] {i.title}\n{i.url}\n{i.text}"
         for i in items
     )
     return (
-        "You are an AI-news assistant. Answer the user's question using the context "
-        "below (recently collected signal + digests). Be concise and concrete, cite "
-        "sources with their URLs inline, and if the context doesn't cover it, say so "
-        "rather than guessing.\n"
+        "You are an AI-news assistant. Answer the user's question using ONLY the "
+        "retrieved context below (the most relevant passages first, each tagged with "
+        "its source and date). Be concrete, synthesise across passages, cite sources "
+        "with their URLs inline, and include dates when the question is about timing. "
+        "If the context genuinely doesn't cover it, say so rather than guessing.\n"
         "ALWAYS reply in Traditional Chinese (繁體中文,台灣用語/詞彙),never Simplified "
         "Chinese, regardless of the language of the question or the sources. Keep "
         "technical terms (model names, etc.) in their original form.\n\n"
-        f"=== RECENT DIGESTS ===\n{digest_text[:4000]}\n\n"
-        f"=== RELEVANT SIGNAL ===\n{ctx[:6000]}\n\n"
+        f"=== RETRIEVED CONTEXT (most relevant first) ===\n{ctx}\n\n"
+        f"=== TODAY'S DIGEST (for recency framing) ===\n{digest_text[:2500]}\n\n"
         f"=== QUESTION ===\n{question}"
     )
 
 
 def answer(question: str, *, store_dir: Path | None = None, digests_dir: Path | None = None,
-           model: str | None = None, k: int = 25) -> str:
+           model: str | None = None, k: int = 12) -> str:
     store_dir = store_dir or config.STORE_DIR
     digests_dir = digests_dir or config.DIGESTS_DIR
     model = model or config.synth_model()
