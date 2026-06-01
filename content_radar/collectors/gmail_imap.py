@@ -1,0 +1,94 @@
+"""Gmail collector — fold AI-news newsletters from your own inbox into the digest.
+
+Newsletters like AINews are already expert-curated, so they're the highest-signal,
+lowest-cost input you can add. This reads matching emails over IMAP; Gmail's
+`X-GM-RAW` lets us use normal Gmail search syntax (see Interests.gmail_query).
+
+Auth uses a FREE Gmail App Password (not your login password, no paid API):
+  https://myaccount.google.com/apppasswords
+Then set GMAIL_USER + GMAIL_APP_PASSWORD. Disabled unless both are present.
+"""
+from __future__ import annotations
+
+import email
+import imaplib
+import os
+from email.header import decode_header, make_header
+
+from bs4 import BeautifulSoup
+
+from ..config import Interests
+from ..models import Item
+from .base import warn
+
+SOURCE = "gmail"
+IMAP_HOST = "imap.gmail.com"
+MAX_EMAILS = 12
+MAX_CHARS = 4000
+
+
+def _creds() -> tuple[str | None, str | None]:
+    return os.environ.get("GMAIL_USER"), os.environ.get("GMAIL_APP_PASSWORD")
+
+
+def _decode(value: str) -> str:
+    try:
+        return str(make_header(decode_header(value)))
+    except Exception:  # noqa: BLE001
+        return value or ""
+
+
+def _body_text(msg) -> str:
+    html = text = ""
+    for part in msg.walk():
+        ctype = part.get_content_type()
+        payload = part.get_payload(decode=True)
+        if not payload:
+            continue
+        decoded = payload.decode(part.get_content_charset() or "utf-8", "ignore")
+        if ctype == "text/html" and not html:
+            html = decoded
+        elif ctype == "text/plain" and not text:
+            text = decoded
+    if html:
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup(["script", "style"]):
+            tag.decompose()
+        return " ".join(soup.get_text(" ").split())
+    return " ".join(text.split())
+
+
+def collect(interests: Interests) -> list[Item]:
+    user, password = _creds()
+    if not user or not password or not interests.gmail_query:
+        return []  # disabled until creds + a query are configured
+    items: list[Item] = []
+    try:
+        conn = imaplib.IMAP4_SSL(IMAP_HOST)
+        conn.login(user, password)
+        conn.select("INBOX")
+        typ, data = conn.search(None, "X-GM-RAW", f'"{interests.gmail_query}"')
+        ids = data[0].split() if (typ == "OK" and data and data[0]) else []
+        for num in reversed(ids[-MAX_EMAILS:]):
+            typ, raw = conn.fetch(num, "(RFC822)")
+            if typ != "OK" or not raw or not raw[0]:
+                continue
+            msg = email.message_from_bytes(raw[0][1])
+            subject = _decode(msg.get("Subject", ""))
+            sender = _decode(msg.get("From", ""))
+            body = _body_text(msg)[:MAX_CHARS]
+            items.append(Item(
+                source=SOURCE,
+                id=str(msg.get("Message-ID") or num.decode()),
+                title=subject[:160],
+                url="",  # newsletters: no single canonical URL
+                text=f"{sender}: {body}",
+                score=0,
+                author=sender,
+                created=msg.get("Date", ""),
+                extra={"newsletter": True},
+            ))
+        conn.logout()
+    except Exception as exc:  # noqa: BLE001 - never break the run
+        warn(SOURCE, exc)
+    return items

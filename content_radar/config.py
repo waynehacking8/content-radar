@@ -43,6 +43,12 @@ class Interests:
     # Discord channel IDs to read (needs DISCORD_BOT_TOKEN + a bot in those
     # servers). Empty by default — opt in.
     discord_channels: tuple[str, ...] = ()
+    # Gmail search (Gmail syntax) for AI-news newsletters to fold in. Needs
+    # GMAIL_USER + GMAIL_APP_PASSWORD. AINews etc. are expert-curated = high signal.
+    gmail_query: str = (
+        'newer_than:4d (from:smol.ai OR from:substack.com OR subject:"AI News" '
+        'OR from:news.nvidia.com)'
+    )
     # Minimum score to keep an item (per-source floors).
     min_score: dict[str, int] = field(
         default_factory=lambda: {

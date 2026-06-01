@@ -37,13 +37,12 @@ jobs:
           pip install -r requirements.txt
           npm install -g @anthropic-ai/claude-code
 
-      - name: Verify Claude auth (diagnostic)
+      - name: Verify Claude auth (fails loudly if the token is bad)
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          claude --version || true
-          echo 'Reply with exactly: OK' | claude -p --output-format json --model sonnet \
-            && echo "AUTH OK" || echo "AUTH TEST FAILED rc=$?"
+          claude --version
+          echo 'Reply with exactly: OK' | claude -p --output-format json --model sonnet
 
       - name: Collect signal
         env:
@@ -51,6 +50,8 @@ jobs:
           REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
           REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: python -m content_radar.cli collect
 
       - name: Build thematic digest (Claude on subscription)
