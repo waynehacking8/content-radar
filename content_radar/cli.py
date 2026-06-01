@@ -90,6 +90,23 @@ def cmd_import(args) -> None:
         print("Qdrant not configured — saved to corpus only.")
 
 
+def cmd_eval(args) -> None:
+    config.load_env()
+    import json
+    from pathlib import Path
+    from .eval_qa import generate_questions, run
+    if args.generate:
+        qs = generate_questions(args.generate, config.synth_model())
+        Path(args.questions).write_text(json.dumps(qs, ensure_ascii=False, indent=2),
+                                        encoding="utf-8")
+        print(f"wrote {len(qs)} questions -> {args.questions}")
+        return
+    qs = json.loads(Path(args.questions).read_text(encoding="utf-8"))
+    if args.limit:
+        qs = qs[: args.limit]
+    run(qs, out_path=args.out)
+
+
 def cmd_show(args) -> None:
     items = load_day(config.STORE_DIR, _today())
     if not items:
@@ -188,6 +205,13 @@ def build_parser() -> argparse.ArgumentParser:
     im.add_argument("--query", default="subject:AINews", help="Gmail-syntax search")
     im.add_argument("--limit", type=int, default=1000, help="max emails to fetch")
     im.set_defaults(func=cmd_import)
+
+    ev = sub.add_parser("eval", help="evaluate answer quality with an LLM judge")
+    ev.add_argument("--generate", type=int, default=0, help="generate N questions and exit")
+    ev.add_argument("--questions", default="eval_questions.json")
+    ev.add_argument("--limit", type=int, default=0, help="only run the first N")
+    ev.add_argument("--out", default="eval_results.json")
+    ev.set_defaults(func=cmd_eval)
 
     y = sub.add_parser("synthesize", help="draft posts from today's signal via Claude")
     y.add_argument("--out", default="./drafts", help="output dir for draft .md files")

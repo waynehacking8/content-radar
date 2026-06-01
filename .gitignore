@@ -2,6 +2,10 @@
 store/
 drafts/
 digests/
+eval_full.json
+eval_sample.json
+eval_results.json
+eval_progress.log
 __pycache__/
 *.pyc
 .pytest_cache/
