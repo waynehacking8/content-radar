@@ -1,6 +1,9 @@
 requests>=2.31
 feedparser>=6.0
 beautifulsoup4>=4.12
-anthropic>=0.40
 python-dotenv>=1.0
 pytest>=8.0
+
+# Synthesis uses the local `claude` CLI on your subscription by default (no key).
+# Only install this if you want the optional --backend api (pay-per-token):
+#   anthropic>=0.40

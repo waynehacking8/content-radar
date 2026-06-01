@@ -46,17 +46,28 @@ def cmd_show(args) -> None:
 
 def cmd_synthesize(args) -> None:
     config.load_env()
-    from .synthesize import synthesize, write_drafts
+    from .synthesize import claude_cli_available, synthesize, write_drafts
 
-    key = config.anthropic_api_key()
-    if not key:
-        raise SystemExit("ANTHROPIC_API_KEY not set (copy .env.example to .env).")
+    api_key = None
+    if args.backend == "cli":
+        if not claude_cli_available():
+            raise SystemExit(
+                "the `claude` CLI was not found. Install Claude Code and log in with "
+                "your subscription (or in CI, set CLAUDE_CODE_OAUTH_TOKEN from "
+                "`claude setup-token`). Or use --backend api with an ANTHROPIC_API_KEY."
+            )
+    else:  # api
+        api_key = config.anthropic_api_key()
+        if not api_key:
+            raise SystemExit("--backend api needs ANTHROPIC_API_KEY (copy .env.example to .env).")
+
     items = load_day(config.STORE_DIR, _today())
     if not items:
         raise SystemExit("no collected items for today. run `collect` first.")
-    print(f"synthesizing {args.n} drafts from {len(items)} items with {config.synth_model()} ...")
-    drafts = synthesize(items, api_key=key, model=config.synth_model(),
-                        n_drafts=args.n, item_limit=args.item_limit)
+    print(f"synthesizing {args.n} drafts from {len(items)} items "
+          f"via {args.backend} ({config.synth_model()}) ...")
+    drafts = synthesize(items, model=config.synth_model(), n_drafts=args.n,
+                        item_limit=args.item_limit, backend=args.backend, api_key=api_key)
     paths = write_drafts(drafts, args.out, _today(), spacing_days=args.spacing)
     print(f"wrote {len(paths)} draft(s) to {args.out}:")
     for p in paths:
@@ -82,6 +93,8 @@ def build_parser() -> argparse.ArgumentParser:
     y.add_argument("--n", type=int, default=5, help="number of drafts")
     y.add_argument("--item-limit", type=int, default=40, help="top items fed to the model")
     y.add_argument("--spacing", type=int, default=2, help="days between draft publish_dates")
+    y.add_argument("--backend", choices=("cli", "api"), default="cli",
+                   help="cli = your Claude subscription (default); api = pay-per-token key")
     y.set_defaults(func=cmd_synthesize)
 
     return parser

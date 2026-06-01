@@ -10,6 +10,8 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Iterable
 
@@ -64,18 +66,64 @@ def _extract_json(text: str) -> list[dict]:
     return json.loads(text[start : end + 1])
 
 
-def synthesize(items, *, api_key, model, n_drafts=5, item_limit=40) -> list[dict]:
-    """Call Claude and return a list of draft dicts. Raises if the SDK/key is missing."""
-    import anthropic  # imported lazily so the package installs without it
+def claude_cli_available() -> bool:
+    return shutil.which("claude") is not None
+
+
+def _result_text(stdout: str) -> str:
+    """Pull the model's text out of `claude --output-format json` (or pass through)."""
+    out = stdout.strip()
+    try:
+        obj = json.loads(out)
+    except json.JSONDecodeError:
+        return out
+    if isinstance(obj, dict) and "result" in obj:
+        return obj["result"]
+    return out
+
+
+def run_claude_cli(prompt: str, model: str, timeout: int = 300) -> str:
+    """Run a one-shot Claude Code query using the local subscription auth.
+
+    Uses `claude -p` (headless). No API key required: auth comes from the
+    logged-in subscription locally, or from CLAUDE_CODE_OAUTH_TOKEN in CI
+    (generate one with `claude setup-token`).
+    """
+    cmd = ["claude", "-p", "--output-format", "json"]
+    if model:
+        cmd += ["--model", model]
+    proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=timeout)
+    if proc.returncode != 0:
+        raise RuntimeError(f"claude CLI failed ({proc.returncode}): {proc.stderr.strip()[:300]}")
+    return _result_text(proc.stdout)
+
+
+def _run_via_api(prompt: str, model: str, api_key: str | None) -> str:
+    if not api_key:
+        raise ValueError("backend='api' requires an Anthropic API key")
+    import anthropic  # imported lazily; only needed for the API backend
 
     client = anthropic.Anthropic(api_key=api_key)
-    prompt = build_prompt(items, n_drafts, item_limit)
     resp = client.messages.create(
         model=model,
         max_tokens=4000,
         messages=[{"role": "user", "content": prompt}],
     )
-    text = "".join(block.text for block in resp.content if block.type == "text")
+    return "".join(block.text for block in resp.content if block.type == "text")
+
+
+def synthesize(items, *, model, n_drafts=5, item_limit=40,
+               backend="cli", api_key=None) -> list[dict]:
+    """Draft posts from collected items; returns a list of draft dicts.
+
+    backend="cli"  -> local `claude` CLI on your subscription (default, no API key)
+    backend="api"  -> Anthropic API with api_key (pay-per-token)
+    """
+    prompt = build_prompt(items, n_drafts, item_limit)
+    if backend == "api":
+        text = _run_via_api(prompt, model, api_key)
+    else:
+        text = run_claude_cli(prompt, model)
     return _extract_json(text)
 
 
