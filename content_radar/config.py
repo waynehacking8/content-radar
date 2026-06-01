@@ -44,10 +44,9 @@ class Interests:
     # servers). Empty by default — opt in.
     discord_channels: tuple[str, ...] = ()
     # Gmail search (Gmail syntax) for AI-news newsletters to fold in. Needs
-    # GMAIL_USER + GMAIL_APP_PASSWORD. Defaults to Brief AI 電子報
-    # (ai@mail.briefnewsletter.com) — Wayne's subscribed Traditional-Chinese AI
-    # newsletter; expert-curated = high signal. Add more senders as needed.
-    gmail_query: str = "from:briefnewsletter.com newer_than:3d"
+    # GMAIL_USER + GMAIL_APP_PASSWORD. Targets swyx's AINews (smol.ai) — the
+    # gold-standard expert-curated AI digest. Add more senders as needed.
+    gmail_query: str = '(from:swyx+ainews@substack.com OR subject:AINews) newer_than:4d'
     # Minimum score to keep an item (per-source floors).
     min_score: dict[str, int] = field(
         default_factory=lambda: {
