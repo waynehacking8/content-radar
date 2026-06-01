@@ -37,9 +37,31 @@ python -m content_radar.cli collect --sources hackernews arxiv   # subset
 # 2) see what came in
 python -m content_radar.cli show --top 25
 
-# 3) draft posts from it (needs ANTHROPIC_API_KEY)
+# 3a) AINews-style thematic digest of the day (clusters signal into themes)
+python -m content_radar.cli digest --out ./digests --themes 5
+
+# 3b) or draft individual posts from the signal
 python -m content_radar.cli synthesize --out ./drafts --n 5
 ```
+
+Synthesis runs on the **local `claude` CLI (your Claude subscription)** by default
+— no API key. For automated runs with your laptop off, see **Automation** below.
+
+The `digest` command produces an AINews-style brief: a one-line headline, a handful
+of **themes** (each a short narrative that synthesises the day's items with inline
+source links), and a **Top by engagement** list.
+
+## Automation (runs with your laptop off)
+
+`.github/workflows/radar.yml` runs daily on GitHub's servers and commits the digest
++ drafts back to the repo for review. It authenticates with **your subscription**,
+not an API key:
+
+1. Locally: `claude setup-token` → copies a 1-year subscription token (works on
+   monthly Pro/Max).
+2. Repo → Settings → Secrets and variables → Actions → add `CLAUDE_CODE_OAUTH_TOKEN`
+   (and optionally `TWITTERAPI_IO_KEY`, `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`).
+3. Trigger it from the Actions tab, or wait for the daily schedule.
 
 Each draft is a Markdown file with YAML front matter:
 

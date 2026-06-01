@@ -75,6 +75,30 @@ def cmd_synthesize(args) -> None:
     print("\nreview them, then approve & post via your posting queue.")
 
 
+def cmd_digest(args) -> None:
+    config.load_env()
+    from .digest import render_digest_markdown, synthesize_digest, write_digest
+    from .synthesize import claude_cli_available
+
+    if not claude_cli_available():
+        raise SystemExit(
+            "the `claude` CLI was not found. Log into Claude Code, or in CI set "
+            "CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`."
+        )
+    items = load_day(config.STORE_DIR, _today())
+    if not items:
+        raise SystemExit("no collected items for today. run `collect` first.")
+    counts: dict[str, int] = {}
+    for it in items:
+        counts[it.source] = counts.get(it.source, 0) + 1
+    print(f"building digest from {len(items)} items via {config.synth_model()} ...")
+    data = synthesize_digest(items, model=config.synth_model(),
+                             max_themes=args.themes, item_limit=args.item_limit)
+    md = render_digest_markdown(data, _today(), counts)
+    path = write_digest(md, args.out, _today())
+    print(f"wrote digest -> {path}  ({len(data.get('themes', []))} themes)")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="content_radar.cli",
                                      description="Collect AI/dev trend signal and draft posts.")
@@ -96,6 +120,12 @@ def build_parser() -> argparse.ArgumentParser:
     y.add_argument("--backend", choices=("cli", "api"), default="cli",
                    help="cli = your Claude subscription (default); api = pay-per-token key")
     y.set_defaults(func=cmd_synthesize)
+
+    d = sub.add_parser("digest", help="AINews-style thematic digest of today's signal")
+    d.add_argument("--out", default="./digests", help="output dir for the digest .md")
+    d.add_argument("--themes", type=int, default=5, help="max number of themes")
+    d.add_argument("--item-limit", type=int, default=60, help="top items fed to the model")
+    d.set_defaults(func=cmd_digest)
 
     return parser
 

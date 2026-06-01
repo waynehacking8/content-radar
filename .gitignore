@@ -1,6 +1,7 @@
 .env
 store/
 drafts/
+digests/
 __pycache__/
 *.pyc
 .pytest_cache/
