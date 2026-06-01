@@ -11,6 +11,19 @@ def test_md_to_html_renders_headings_links_and_lists():
     assert "<ul>" in html and "<li>plain item</li>" in html and "</ul>" in html
 
 
+def test_md_to_html_renders_bold_italic_and_rules():
+    md = "**Opus 4.8** landed\n\n*5 月 30 日*\n\n---\n\n### #### sub"
+    html = mailer._md_to_html(md)
+    assert "<strong>Opus 4.8</strong>" in html
+    assert "<em>5 月 30 日</em>" in html
+    assert "<hr>" in html
+    # literal asterisks must not survive into the HTML body
+    assert "**" not in html
+    # bold inside a heading is converted too
+    h = mailer._md_to_html("## **重點** 章節")
+    assert "<h2><strong>重點</strong> 章節</h2>" in h
+
+
 def test_build_message_is_multipart_plain_and_html():
     msg = mailer.build_message("Subj", "# Hi\n\nbody", to_addr="a@b.com", from_addr="c@d.com")
     assert msg["Subject"] == "Subj"
