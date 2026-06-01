@@ -107,6 +107,26 @@ def cmd_eval(args) -> None:
     run(qs, out_path=args.out)
 
 
+def cmd_email_digest(args) -> None:
+    config.load_env()
+    from pathlib import Path
+    from . import mailer
+    from .digest import chinese_email_markdown
+
+    if not mailer.configured():
+        raise SystemExit("set GMAIL_USER + GMAIL_APP_PASSWORD to send the digest email.")
+    day = _today()
+    digest_path = Path(args.digests) / f"digest-{day.isoformat()}.md"
+    if not digest_path.exists():
+        raise SystemExit(f"no digest for {day} at {digest_path}. run `digest` first.")
+    english = digest_path.read_text(encoding="utf-8")
+    print(f"localizing {digest_path.name} to Traditional Chinese via {config.synth_model()} ...")
+    zh = chinese_email_markdown(english, config.synth_model())
+    subject = f"AI Radar 中文日報 — {day.isoformat()}"
+    to = mailer.send_markdown_email(subject, zh, to_addr=args.to or None)
+    print(f"sent '{subject}' -> {to}")
+
+
 def cmd_show(args) -> None:
     items = load_day(config.STORE_DIR, _today())
     if not items:
@@ -221,6 +241,12 @@ def build_parser() -> argparse.ArgumentParser:
     y.add_argument("--backend", choices=("cli", "api"), default="cli",
                    help="cli = your Claude subscription (default); api = pay-per-token key")
     y.set_defaults(func=cmd_synthesize)
+
+    me = sub.add_parser("email-digest",
+                        help="email today's digest as a Traditional Chinese edition")
+    me.add_argument("--digests", default="./digests", help="dir holding digest-*.md")
+    me.add_argument("--to", default="", help="recipient (default: DIGEST_EMAIL_TO env)")
+    me.set_defaults(func=cmd_email_digest)
 
     d = sub.add_parser("digest", help="AINews-style thematic digest of today's signal")
     d.add_argument("--out", default="./digests", help="output dir for the digest .md")

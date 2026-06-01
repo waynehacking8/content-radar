@@ -72,6 +72,23 @@ def anthropic_api_key() -> str | None:
     return os.environ.get("ANTHROPIC_API_KEY") or None
 
 
+def gmail_user() -> str | None:
+    return os.environ.get("GMAIL_USER") or None
+
+
+def gmail_app_password() -> str | None:
+    return os.environ.get("GMAIL_APP_PASSWORD") or None
+
+
+# Where the daily Traditional-Chinese digest email is delivered. Reuses the
+# Gmail SMTP sender above; override the recipient with DIGEST_EMAIL_TO.
+DEFAULT_DIGEST_EMAIL_TO = "waynehacking8@gmail.com"
+
+
+def digest_email_to() -> str:
+    return os.environ.get("DIGEST_EMAIL_TO", DEFAULT_DIGEST_EMAIL_TO).strip() or DEFAULT_DIGEST_EMAIL_TO
+
+
 # Synthesis model. Alias ("sonnet"/"opus"/"haiku") is most portable for the
 # `claude` CLI; override with SYNTH_MODEL for a specific version.
 def synth_model() -> str:

@@ -147,3 +147,19 @@ def write_digest(markdown: str, out_dir, day: _dt.date) -> Path:
     path = out / f"digest-{day.isoformat()}.md"
     path.write_text(markdown, encoding="utf-8")
     return path
+
+
+ZH_INSTRUCTIONS = """\
+你是一份每日 AI/開發者情報日報的中文編輯。把下面這份英文 digest 改寫成一封
+**繁體中文(台灣用語)** 的電子報,讀者是工程師。要求:
+- 全文繁體中文,但模型名稱、公司名、技術術語(如 RAG、Transformer)保留原文。
+- 保留每個連結(Markdown 連結或 <url> 角括號連結原樣保留,不要刪)。
+- 保持原本的主題結構與重點,語氣精煉、不浮誇、有資訊密度。
+- 開頭用一句話點出今天最重要的事。
+只輸出改寫後的 Markdown,不要加任何說明文字。"""
+
+
+def chinese_email_markdown(english_markdown: str, model: str) -> str:
+    """Localize a built English digest into a Traditional Chinese email edition."""
+    prompt = f"{ZH_INSTRUCTIONS}\n\n=== ENGLISH DIGEST ===\n{english_markdown}"
+    return run_claude_cli(prompt, model).strip()
