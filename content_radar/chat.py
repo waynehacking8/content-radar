@@ -72,11 +72,18 @@ def build_chat_prompt(question: str, items: list[Item], digest_text: str,
     # web when the KB genuinely can't answer. Keeps well-covered questions instant.
     gap_policy = (
         "Prefer the retrieved context — it is your primary, trusted source. If it "
-        "fully covers the question, answer from it WITHOUT searching the web. ONLY "
-        "if it lacks the specifics the question demands (e.g. exact hardware specs, "
-        "precise funding figures, a niche vertical, or very recent news) use the "
-        "WebSearch tool to fill the gap, then clearly attribute web-sourced facts "
-        "with their URLs. Never invent figures you can't source."
+        "fully covers the question, answer from it WITHOUT searching the web. But if "
+        "it lacks the specifics the question demands (exact hardware specs, precise "
+        "funding figures, a niche vertical, or very recent news), you MUST use the "
+        "WebSearch tool to fill the gap NOW — actually search; never merely suggest "
+        "that the user search. For list/enumeration questions ('which companies…', "
+        "'有哪些…'), if the context covers only part of the list, search to complete "
+        "it rather than answering with a partial list. Grounding rules: (1) attach a "
+        "specific date to every event/figure you state; (2) include ONLY items that "
+        "fall inside the exact time window the question asks about — drop anything "
+        "outside it; (3) every name, figure, or claim must come from the retrieved "
+        "context or a web result you actually opened — cite its URL; never state a "
+        "fact you cannot source, and never blur dates across periods."
         if web_fallback else
         "If the context genuinely doesn't cover it, say so rather than guessing."
     )

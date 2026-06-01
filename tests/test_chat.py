@@ -47,7 +47,7 @@ def test_build_chat_prompt_web_fallback_invites_web_search_with_attribution():
     # prefers KB but allows the tool, and demands sourced facts (no invention)
     assert "WebSearch" in prompt
     assert "Prefer the retrieved context" in prompt
-    assert "Never invent" in prompt
+    assert "never state a fact you cannot source" in prompt
 
 
 def test_answer_passes_websearch_tool_only_when_web_fallback(monkeypatch):
