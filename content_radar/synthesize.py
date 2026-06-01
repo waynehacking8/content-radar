@@ -94,7 +94,8 @@ def run_claude_cli(prompt: str, model: str, timeout: int = 300) -> str:
         cmd += ["--model", model]
     proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=timeout)
     if proc.returncode != 0:
-        raise RuntimeError(f"claude CLI failed ({proc.returncode}): {proc.stderr.strip()[:300]}")
+        detail = (proc.stderr.strip() or proc.stdout.strip() or "no output")[:600]
+        raise RuntimeError(f"claude CLI failed ({proc.returncode}): {detail}")
     return _result_text(proc.stdout)
 
 

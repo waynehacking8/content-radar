@@ -67,6 +67,7 @@ def anthropic_api_key() -> str | None:
     return os.environ.get("ANTHROPIC_API_KEY") or None
 
 
-# Synthesis model. Override with SYNTH_MODEL if you want a cheaper/bigger one.
+# Synthesis model. Alias ("sonnet"/"opus"/"haiku") is most portable for the
+# `claude` CLI; override with SYNTH_MODEL for a specific version.
 def synth_model() -> str:
-    return os.environ.get("SYNTH_MODEL", "claude-sonnet-4-6")
+    return os.environ.get("SYNTH_MODEL", "sonnet")
