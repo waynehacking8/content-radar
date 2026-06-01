@@ -82,16 +82,22 @@ def _result_text(stdout: str) -> str:
     return out
 
 
-def run_claude_cli(prompt: str, model: str, timeout: int = 300) -> str:
+def run_claude_cli(prompt: str, model: str, timeout: int = 300,
+                   allowed_tools: list[str] | None = None) -> str:
     """Run a one-shot Claude Code query using the local subscription auth.
 
     Uses `claude -p` (headless). No API key required: auth comes from the
     logged-in subscription locally, or from CLAUDE_CODE_OAUTH_TOKEN in CI
     (generate one with `claude setup-token`).
+
+    allowed_tools enables agentic tools (e.g. ["WebSearch"]) so the model can
+    fill knowledge-base gaps from the live web; omit for a pure, fast one-shot.
     """
     cmd = ["claude", "-p", "--output-format", "json"]
     if model:
         cmd += ["--model", model]
+    if allowed_tools:
+        cmd += ["--allowedTools", ",".join(allowed_tools)]
     proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=timeout)
     if proc.returncode != 0:
         detail = (proc.stderr.strip() or proc.stdout.strip() or "no output")[:600]

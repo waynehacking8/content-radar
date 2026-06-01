@@ -32,3 +32,44 @@ def test_build_chat_prompt_includes_question_and_sources():
     assert "NVIDIA news" in prompt
     assert "DIGEST TEXT HERE" in prompt
     assert "http://x/1" in prompt
+
+
+def test_build_chat_prompt_kb_only_does_not_invite_web_search():
+    items = [_item("1", "NVIDIA news", text="kernels")]
+    prompt = build_chat_prompt("nvidia?", items, "DIGEST", web_fallback=False)
+    assert "WebSearch" not in prompt
+    assert "say so rather than guessing" in prompt
+
+
+def test_build_chat_prompt_web_fallback_invites_web_search_with_attribution():
+    items = [_item("1", "NVIDIA news", text="kernels")]
+    prompt = build_chat_prompt("nvidia?", items, "DIGEST", web_fallback=True)
+    # prefers KB but allows the tool, and demands sourced facts (no invention)
+    assert "WebSearch" in prompt
+    assert "Prefer the retrieved context" in prompt
+    assert "Never invent" in prompt
+
+
+def test_answer_passes_websearch_tool_only_when_web_fallback(monkeypatch):
+    import content_radar.chat as chat_mod
+
+    captured = {}
+
+    def fake_run(prompt, model, timeout=300, allowed_tools=None):
+        captured["timeout"] = timeout
+        captured["allowed_tools"] = allowed_tools
+        return "ok"
+
+    monkeypatch.setattr(chat_mod, "run_claude_cli", fake_run)
+    monkeypatch.setattr(chat_mod.rag, "configured", lambda: False)
+    monkeypatch.setattr(chat_mod.kb, "get_index", lambda _d: object())
+    monkeypatch.setattr(chat_mod.kb, "search", lambda _i, _q, limit=12: [])
+    monkeypatch.setattr(chat_mod, "recent_digests", lambda _d, n=2: "")
+
+    chat_mod.answer("q", web_fallback=True)
+    assert captured["allowed_tools"] == ["WebSearch"]
+    assert captured["timeout"] == 420
+
+    chat_mod.answer("q", web_fallback=False)
+    assert captured["allowed_tools"] is None
+    assert captured["timeout"] == 300

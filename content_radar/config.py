@@ -76,3 +76,11 @@ def anthropic_api_key() -> str | None:
 # `claude` CLI; override with SYNTH_MODEL for a specific version.
 def synth_model() -> str:
     return os.environ.get("SYNTH_MODEL", "sonnet")
+
+
+# Agentic web-search fallback: when the local knowledge base doesn't cover a
+# question (niche specs, exact figures, fast-moving vertical news), let the
+# answering model fill the gap from the live web. On by default; set
+# WEB_FALLBACK=0 for a pure, KB-only (and faster) answer path.
+def web_fallback_enabled() -> bool:
+    return os.environ.get("WEB_FALLBACK", "1").strip().lower() not in {"0", "false", "no", ""}

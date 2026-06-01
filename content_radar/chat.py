@@ -21,6 +21,13 @@ _STOPWORDS = {
     "new", "news", "latest", "today", "did", "does", "can", "you", "your",
 }
 
+# Agentic tool the model may use to fill knowledge-base gaps from the live web.
+_WEB_TOOLS = ["WebSearch"]
+# One-shot answer timeout (s). The web-fallback path adds tool-use turns, so it
+# gets more headroom than the pure KB path.
+_ANSWER_TIMEOUT_S = 300
+_WEB_ANSWER_TIMEOUT_S = 420
+
 
 def _recent_items(store_dir: Path, days: int, today: _dt.date) -> list[Item]:
     items: list[Item] = []
@@ -53,19 +60,32 @@ def recent_digests(digests_dir: Path, n: int = 2) -> str:
     return "\n\n".join(f.read_text(encoding="utf-8") for f in files)
 
 
-def build_chat_prompt(question: str, items: list[Item], digest_text: str) -> str:
+def build_chat_prompt(question: str, items: list[Item], digest_text: str,
+                      web_fallback: bool = False) -> str:
     # Context engineering: full chunk text (no truncation), most relevant first,
     # each tagged with source + date. The long-context model handles it.
     ctx = "\n\n".join(
         f"[{i.source} · {i.created or 'n/a'}] {i.title}\n{i.url}\n{i.text}"
         for i in items
     )
+    # Agentic RAG: prefer the retrieved KB (fast, grounded); only reach for the
+    # web when the KB genuinely can't answer. Keeps well-covered questions instant.
+    gap_policy = (
+        "Prefer the retrieved context — it is your primary, trusted source. If it "
+        "fully covers the question, answer from it WITHOUT searching the web. ONLY "
+        "if it lacks the specifics the question demands (e.g. exact hardware specs, "
+        "precise funding figures, a niche vertical, or very recent news) use the "
+        "WebSearch tool to fill the gap, then clearly attribute web-sourced facts "
+        "with their URLs. Never invent figures you can't source."
+        if web_fallback else
+        "If the context genuinely doesn't cover it, say so rather than guessing."
+    )
     return (
-        "You are an AI-news assistant. Answer the user's question using ONLY the "
+        "You are an AI-news assistant. Answer the user's question primarily from the "
         "retrieved context below (the most relevant passages first, each tagged with "
         "its source and date). Be concrete, synthesise across passages, cite sources "
         "with their URLs inline, and include dates when the question is about timing. "
-        "If the context genuinely doesn't cover it, say so rather than guessing.\n"
+        f"{gap_policy}\n"
         "ALWAYS reply in Traditional Chinese (繁體中文,台灣用語/詞彙),never Simplified "
         "Chinese, regardless of the language of the question or the sources. Keep "
         "technical terms (model names, etc.) in their original form.\n\n"
@@ -76,15 +96,19 @@ def build_chat_prompt(question: str, items: list[Item], digest_text: str) -> str
 
 
 def answer(question: str, *, store_dir: Path | None = None, digests_dir: Path | None = None,
-           model: str | None = None, k: int = 12) -> str:
+           model: str | None = None, k: int = 12, web_fallback: bool | None = None) -> str:
     store_dir = store_dir or config.STORE_DIR
     digests_dir = digests_dir or config.DIGESTS_DIR
     model = model or config.synth_model()
+    web_fallback = config.web_fallback_enabled() if web_fallback is None else web_fallback
     # Industry-standard vector retrieval (Qdrant + fastembed) when configured,
     # else local SQLite FTS over the committed corpus.
     if rag.configured():
         chosen = rag.search(question, limit=k)
     else:
         chosen = kb.search(kb.get_index(store_dir), question, limit=k)
-    prompt = build_chat_prompt(question, chosen, recent_digests(digests_dir))
-    return run_claude_cli(prompt, model)
+    prompt = build_chat_prompt(question, chosen, recent_digests(digests_dir),
+                               web_fallback=web_fallback)
+    tools = _WEB_TOOLS if web_fallback else None
+    timeout = _WEB_ANSWER_TIMEOUT_S if web_fallback else _ANSWER_TIMEOUT_S
+    return run_claude_cli(prompt, model, timeout=timeout, allowed_tools=tools)

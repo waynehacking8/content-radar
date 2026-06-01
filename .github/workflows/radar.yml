@@ -61,7 +61,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/fastembed
-          key: fastembed-bge-small
+          key: fastembed-e5-large-jina-v2
 
       - name: Index into the Qdrant knowledge base
         env:
