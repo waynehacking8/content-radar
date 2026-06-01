@@ -51,6 +51,67 @@ The `digest` command produces an AINews-style brief: a one-line headline, a hand
 of **themes** (each a short narrative that synthesises the day's items with inline
 source links), and a **Top by engagement** list.
 
+## Chat bot — ask your radar (中文問答範例)
+
+A Telegram bot (`content_radar/telegram_bot.py`) answers questions grounded in the
+knowledge base (413+ dated AINews issues 2024–2026 + HN/arXiv/GitHub), retrieved
+with **hybrid search + cross-encoder rerank**. Answers are in **Traditional Chinese**,
+cite sources with dates, and are **not truncated**. When the KB doesn't cover a
+question, it falls back to **WebSearch** and attributes the web sources.
+
+可以問的問題類型(實際回答節錄,皆為機器人真實輸出):
+
+| 類型 | 範例問題 |
+|---|---|
+| 📅 時間軸 / 歷史 | 「Anthropic 從 2024 到 2026 完成哪幾輪融資?各輪金額大約多少?」 |
+| 🏢 公司 / 模型 | 「Claude Opus 4.8 跟前一代相比有哪些重點改進?」 |
+| 🔬 技術概念 | 「Contextual Retrieval 是什麼?它如何改善 RAG 效果?」 |
+| ⚙️ 工程實作 | 「推測解碼(Speculative Decoding)如何加速大模型推理?」 |
+| 🌐 KB 沒有 → 自動上網 | 「NVIDIA H100 跟 H200 的規格主要差在哪?」 |
+
+<details>
+<summary><b>Q:</b> Contextual Retrieval 是什麼?它如何改善 RAG 效果?</summary>
+
+> **Contextual Retrieval** 是 Anthropic 提出的 RAG 改良技術,核心是在把文件切成 chunks 存入向量庫前,先為每個 chunk 加上「情境說明」,讓每段文字知道自己在整份文件中的位置與意義。
+>
+> 根據 Anthropic 研究(2024-09),它結合 **Contextual Embedding** 與 **Contextual BM25**,搭配 reranking 後,前 20 個 chunk 的**檢索失誤率從 5.7% 降至 1.9%(降幅 67%)**;並用 prompt caching 降低為每個 chunk 生成情境說明的成本。
+>
+> 來源:[AINews] Anthropic Contextual Retrieval(2024-09-21)、[AINews] cde-small-v1(2024-10-05)
+
+</details>
+
+<details>
+<summary><b>Q:</b> Anthropic 從 2024 到 2026 完成哪幾輪融資?(時間軸題)</summary>
+
+> | 時間 | 輪次 | 金額／估值 |
+> |------|------|-----------|
+> | 2024 末 | Amazon 策略投資 | $40 億 |
+> | 2025-03 | Series E | 估值 $615 億 |
+> | 2026-02 | 未具名 | 估值 $3,800 億(ARR $140 億) |
+> | 2026-05-29 | Series H | 募資 $650 億,post-money 估值 $9,650 億(ARR $470 億) |
+>
+> 每筆都附對應的 AINews 期數與日期連結。
+
+</details>
+
+<details>
+<summary><b>Q:</b> NVIDIA H100 跟 H200 的規格主要差在哪?(KB 沒有 → WebSearch)</summary>
+
+> H200 是 H100 的**記憶體升級版**,同一塊 Hopper(GH100)晶片,差異集中在記憶體:
+>
+> | 規格 | H100 SXM | H200 SXM |
+> |------|----------|----------|
+> | 記憶體 | 80 GB HBM3 | **141 GB HBM3e**(+76%) |
+> | 頻寬 | 3.35 TB/s | **4.8 TB/s**(+43%) |
+>
+> 因為大模型推論是記憶體頻寬瓶頸,H200 在 MLPerf Llama2-70B 吞吐量提升約 +37～42%。
+>
+> Sources(WebSearch 自動附上):NVIDIA H200 官方頁、Databasemart、Spheron 等。
+
+</details>
+
+> 完整問答(含 Opus 4.8、Speculative Decoding 等)直接 DM 機器人即可;每題回答都帶日期與來源,KB 不足時自動補網路來源。
+
 ## Automation (runs with your laptop off)
 
 `.github/workflows/radar.yml` runs daily on GitHub's servers and commits the digest
