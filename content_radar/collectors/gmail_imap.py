@@ -13,6 +13,7 @@ from __future__ import annotations
 import email
 import imaplib
 import os
+import re
 from email.header import decode_header, make_header
 
 from bs4 import BeautifulSoup
@@ -24,7 +25,8 @@ from .base import warn
 SOURCE = "gmail"
 IMAP_HOST = "imap.gmail.com"
 MAX_EMAILS = 12
-MAX_CHARS = 4000
+MAX_CHARS = 4000           # enough for digest synthesis (keeps the corpus lean)
+FULL_CHARS = 60_000        # for faithful full-newsletter translation
 
 
 def _creds() -> tuple[str | None, str | None]:
@@ -36,6 +38,13 @@ def _decode(value: str) -> str:
         return str(make_header(decode_header(value)))
     except Exception:  # noqa: BLE001
         return value or ""
+
+
+def _normalize(text: str) -> str:
+    """Trim each line and collapse runs of blank lines — keeps section/paragraph
+    structure (so a faithful translation can mirror it) without runaway whitespace."""
+    lines = [ln.strip() for ln in text.splitlines()]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 
 def _body_text(msg) -> str:
@@ -54,15 +63,17 @@ def _body_text(msg) -> str:
         soup = BeautifulSoup(html, "html.parser")
         for tag in soup(["script", "style"]):
             tag.decompose()
-        return " ".join(soup.get_text(" ").split())
-    return " ".join(text.split())
+        # newline separator preserves the newsletter's sections and bullet items
+        return _normalize(soup.get_text("\n"))
+    return _normalize(text)
 
 
-def fetch(query: str, limit: int = MAX_EMAILS) -> list[Item]:
+def fetch(query: str, limit: int = MAX_EMAILS, max_chars: int = MAX_CHARS) -> list[Item]:
     """Fetch up to `limit` emails matching a Gmail-syntax query (X-GM-RAW).
 
     Each Item carries the email's Date in `created` (so history is dated). Set a
-    large limit to import a whole newsletter archive.
+    large limit to import a whole newsletter archive; raise `max_chars` (e.g.
+    FULL_CHARS) to keep the full body for faithful translation.
     """
     user, password = _creds()
     if not user or not password or not query:
@@ -81,7 +92,7 @@ def fetch(query: str, limit: int = MAX_EMAILS) -> list[Item]:
             msg = email.message_from_bytes(raw[0][1])
             subject = _decode(msg.get("Subject", ""))
             sender = _decode(msg.get("From", ""))
-            body = _body_text(msg)[:MAX_CHARS]
+            body = _body_text(msg)[:max_chars]
             items.append(Item(
                 source=SOURCE,
                 id=str(msg.get("Message-ID") or num.decode()),

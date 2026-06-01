@@ -109,22 +109,25 @@ def cmd_eval(args) -> None:
 
 def cmd_email_digest(args) -> None:
     config.load_env()
-    from pathlib import Path
     from . import mailer
-    from .digest import chinese_email_markdown
+    from .collectors import gmail_imap
+    from .digest import chinese_newsletter_markdown
 
     if not mailer.configured():
         raise SystemExit("set GMAIL_USER + GMAIL_APP_PASSWORD to send the digest email.")
-    day = _today()
-    digest_path = Path(args.digests) / f"digest-{day.isoformat()}.md"
-    if not digest_path.exists():
-        raise SystemExit(f"no digest for {day} at {digest_path}. run `digest` first.")
-    english = digest_path.read_text(encoding="utf-8")
-    print(f"localizing {digest_path.name} to Traditional Chinese via {config.synth_model()} ...")
-    zh = chinese_email_markdown(english, config.synth_model())
-    subject = f"AI Radar 中文日報 — {day.isoformat()}"
+    # Pull the latest AINews newsletter in FULL (no digest truncation), so the
+    # Chinese edition mirrors the original's depth section-for-section.
+    items = gmail_imap.fetch(args.query, limit=1, max_chars=args.max_chars)
+    if not items:
+        raise SystemExit(f"no email matched {args.query!r} in the inbox.")
+    src = items[0]
+    body = src.text.split(": ", 1)[-1] if ": " in src.text[:80] else src.text
+    print(f"translating '{src.title}' ({len(body)} chars) to Traditional Chinese "
+          f"via {config.synth_model()} ...")
+    zh = chinese_newsletter_markdown(body, config.synth_model())
+    subject = f"{src.title} — 中文版"
     to = mailer.send_markdown_email(subject, zh, to_addr=args.to or None)
-    print(f"sent '{subject}' -> {to}")
+    print(f"sent '{subject}' ({len(zh)} chars) -> {to}")
 
 
 def cmd_show(args) -> None:
@@ -243,8 +246,11 @@ def build_parser() -> argparse.ArgumentParser:
     y.set_defaults(func=cmd_synthesize)
 
     me = sub.add_parser("email-digest",
-                        help="email today's digest as a Traditional Chinese edition")
-    me.add_argument("--digests", default="./digests", help="dir holding digest-*.md")
+                        help="email the latest AINews newsletter, fully translated to 繁中")
+    me.add_argument("--query", default="subject:AINews",
+                    help="Gmail-syntax search for the newsletter to translate")
+    me.add_argument("--max-chars", type=int, default=60_000, dest="max_chars",
+                    help="max source chars to translate (full newsletter)")
     me.add_argument("--to", default="", help="recipient (default: DIGEST_EMAIL_TO env)")
     me.set_defaults(func=cmd_email_digest)
 
