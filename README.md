@@ -99,17 +99,30 @@ min_score        = {"hackernews": 20, "reddit": 50, "github": 25, ...}
 content_radar/
   models.py            # immutable Item
   store.py             # dated JSON store + dedup (idempotent re-runs)
-  config.py            # interests + secret loading (.env, nothing hard-coded)
+  config.py            # interests (keywords, x_accounts, subreddits...) + secrets
   collectors/
     hackernews.py      # Algolia API (free)
     arxiv.py           # export API (free)
     github_trending.py # trending page parse (free)
-    reddit.py          # public JSON (free)
-    x_twitterapi.py    # twitterapi.io (optional, paid; off unless key set)
-  synthesize.py        # Claude -> draft .md files
-  cli.py               # collect / show / synthesize
-tests/                 # store, models, synthesis (run: python -m pytest)
+    reddit.py          # OAuth or public JSON (free)
+    x_twitterapi.py    # twitterapi.io: keyword search + curated account timelines
+    discord_collector.py # official Bot REST API (opt-in; no self-bots)
+  enrich.py            # Phase 3: fetch + attach linked-article text
+  digest.py            # Phase 2/4: thematic clustering + best-of-N editorial pick
+  synthesize.py        # Claude backend (subscription CLI) -> draft posts
+  cli.py               # collect / show / digest / synthesize
+tests/                 # 16 tests; gate, store, digest, enrich (python -m pytest)
 ```
+
+### How it matches AINews
+
+| AINews technique | content-radar |
+|---|---|
+| Breadth: Twitter accounts + Reddit + Discord | `x_accounts` timelines, Reddit OAuth, Discord bot |
+| Click through links and summarise them | `enrich.py` (Phase 3) |
+| Cluster into themes with attribution | `digest.py` (Phase 2) |
+| Run N pipelines, pick the best | `--best-of N` (Phase 4) |
+| Daily, automated | GitHub Actions on your subscription |
 
 ## Design notes
 

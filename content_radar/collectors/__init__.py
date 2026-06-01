@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from ..config import Interests
 from ..models import Item
-from . import arxiv, github_trending, hackernews, reddit, x_twitterapi
+from . import arxiv, discord_collector, github_trending, hackernews, reddit, x_twitterapi
 
 REGISTRY = {
     "hackernews": hackernews.collect,
@@ -11,6 +11,7 @@ REGISTRY = {
     "github": github_trending.collect,
     "reddit": reddit.collect,
     "x": x_twitterapi.collect,
+    "discord": discord_collector.collect,
 }
 
 

@@ -34,10 +34,20 @@ class Interests:
     x_queries: tuple[str, ...] = (
         "LLM inference", "agentic RAG", "vLLM OR TensorRT-LLM",
     )
+    # Curated X accounts to monitor (the AINews "544 twitters" pattern). A small,
+    # high-signal starter set — extend freely.
+    x_accounts: tuple[str, ...] = (
+        "swyx", "karpathy", "_philschmid", "jeremyphoward", "ClementDelangue",
+        "vllm_project", "ggerganov", "scaling01", "omarsar0", "reach_vb",
+    )
+    # Discord channel IDs to read (needs DISCORD_BOT_TOKEN + a bot in those
+    # servers). Empty by default — opt in.
+    discord_channels: tuple[str, ...] = ()
     # Minimum score to keep an item (per-source floors).
     min_score: dict[str, int] = field(
         default_factory=lambda: {
-            "hackernews": 20, "reddit": 50, "github": 25, "arxiv": 0, "x": 10,
+            "hackernews": 20, "reddit": 50, "github": 25, "arxiv": 0,
+            "x": 10, "discord": 0,
         }
     )
 
@@ -47,6 +57,10 @@ DEFAULT_INTERESTS = Interests()
 
 def twitterapi_io_key() -> str | None:
     return os.environ.get("TWITTERAPI_IO_KEY") or None
+
+
+def discord_bot_token() -> str | None:
+    return os.environ.get("DISCORD_BOT_TOKEN") or None
 
 
 def anthropic_api_key() -> str | None:

@@ -75,6 +75,37 @@ def synthesize_digest(items, *, model, max_themes=5, item_limit=60) -> dict:
     return extract_json_object(run_claude_cli(prompt, model))
 
 
+JUDGE_INSTRUCTIONS = """\
+You are the editor of a daily AI/dev digest. Below are several candidate digests
+as JSON. Pick the single best one: most signal, sharpest and least-overlapping
+themes, best source attribution, least hype, most useful to a practitioner.
+Return ONLY a JSON object: {"best": <zero-based index>, "why": "one short line"}."""
+
+
+def pick_best_digest(candidates: list[dict], *, model) -> dict:
+    if len(candidates) == 1:
+        return candidates[0]
+    listing = "\n\n".join(
+        f"=== CANDIDATE {i} ===\n{json.dumps(c, ensure_ascii=False)[:3000]}"
+        for i, c in enumerate(candidates)
+    )
+    out = run_claude_cli(f"{JUDGE_INSTRUCTIONS}\n\n{listing}", model)
+    try:
+        idx = int(extract_json_object(out).get("best", 0))
+    except (ValueError, TypeError):
+        idx = 0
+    return candidates[max(0, min(idx, len(candidates) - 1))]
+
+
+def synthesize_digest_best_of(items, *, model, max_themes=5, item_limit=60, n=1) -> dict:
+    """Generate `n` candidate digests and have the model pick the best (AINews-style)."""
+    candidates = [
+        synthesize_digest(items, model=model, max_themes=max_themes, item_limit=item_limit)
+        for _ in range(max(1, n))
+    ]
+    return pick_best_digest(candidates, model=model)
+
+
 def render_digest_markdown(data: dict, day: _dt.date, counts: dict[str, int]) -> str:
     total = sum(counts.values())
     checked = ", ".join(f"{k}({v})" for k, v in sorted(counts.items())) or "no sources"

@@ -77,7 +77,8 @@ def cmd_synthesize(args) -> None:
 
 def cmd_digest(args) -> None:
     config.load_env()
-    from .digest import render_digest_markdown, synthesize_digest, write_digest
+    from .digest import render_digest_markdown, synthesize_digest_best_of, write_digest
+    from .enrich import enrich_items
     from .synthesize import claude_cli_available
 
     if not claude_cli_available():
@@ -85,15 +86,22 @@ def cmd_digest(args) -> None:
             "the `claude` CLI was not found. Log into Claude Code, or in CI set "
             "CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`."
         )
-    items = load_day(config.STORE_DIR, _today())
+    items = list(load_day(config.STORE_DIR, _today()))
     if not items:
         raise SystemExit("no collected items for today. run `collect` first.")
     counts: dict[str, int] = {}
     for it in items:
         counts[it.source] = counts.get(it.source, 0) + 1
-    print(f"building digest from {len(items)} items via {config.synth_model()} ...")
-    data = synthesize_digest(items, model=config.synth_model(),
-                             max_themes=args.themes, item_limit=args.item_limit)
+
+    if args.enrich > 0:
+        print(f"enriching top {args.enrich} links (fetching article text) ...")
+        items = enrich_items(items, top_n=args.enrich)
+
+    print(f"building digest from {len(items)} items via {config.synth_model()} "
+          f"(best-of-{args.best_of}) ...")
+    data = synthesize_digest_best_of(items, model=config.synth_model(),
+                                     max_themes=args.themes, item_limit=args.item_limit,
+                                     n=args.best_of)
     md = render_digest_markdown(data, _today(), counts)
     path = write_digest(md, args.out, _today())
     print(f"wrote digest -> {path}  ({len(data.get('themes', []))} themes)")
@@ -125,6 +133,10 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--out", default="./digests", help="output dir for the digest .md")
     d.add_argument("--themes", type=int, default=5, help="max number of themes")
     d.add_argument("--item-limit", type=int, default=60, help="top items fed to the model")
+    d.add_argument("--enrich", type=int, default=12,
+                   help="fetch+attach article text for the top N links (0 = off)")
+    d.add_argument("--best-of", type=int, default=1, dest="best_of",
+                   help="generate N digests and let the model pick the best (AINews-style)")
     d.set_defaults(func=cmd_digest)
 
     return parser
