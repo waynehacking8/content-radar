@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
 STORE_DIR = ROOT / "store"
+DIGESTS_DIR = ROOT / "digests"
 ENV_FILE = ROOT / ".env"
 
 
