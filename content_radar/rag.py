@@ -13,7 +13,9 @@ import uuid
 from .models import Item
 
 COLLECTION = "radar"
-EMBED_MODEL = "BAAI/bge-small-en-v1.5"  # local, free, CI-friendly (ONNX)
+# Multilingual so Traditional-Chinese questions retrieve English sources
+# (cross-lingual). Local, free, CI-friendly (ONNX).
+EMBED_MODEL = "intfloat/multilingual-e5-large"
 _NAMESPACE = uuid.UUID("6f9619ff-8b86-d011-b42d-00cf4fc964ff")
 
 

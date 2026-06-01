@@ -58,18 +58,23 @@ def _body_text(msg) -> str:
     return " ".join(text.split())
 
 
-def collect(interests: Interests) -> list[Item]:
+def fetch(query: str, limit: int = MAX_EMAILS) -> list[Item]:
+    """Fetch up to `limit` emails matching a Gmail-syntax query (X-GM-RAW).
+
+    Each Item carries the email's Date in `created` (so history is dated). Set a
+    large limit to import a whole newsletter archive.
+    """
     user, password = _creds()
-    if not user or not password or not interests.gmail_query:
-        return []  # disabled until creds + a query are configured
+    if not user or not password or not query:
+        return []
     items: list[Item] = []
     try:
         conn = imaplib.IMAP4_SSL(IMAP_HOST)
         conn.login(user, password)
         conn.select("INBOX")
-        typ, data = conn.search(None, "X-GM-RAW", f'"{interests.gmail_query}"')
+        typ, data = conn.search(None, "X-GM-RAW", f'"{query}"')
         ids = data[0].split() if (typ == "OK" and data and data[0]) else []
-        for num in reversed(ids[-MAX_EMAILS:]):
+        for num in reversed(ids[-limit:]):
             typ, raw = conn.fetch(num, "(RFC822)")
             if typ != "OK" or not raw or not raw[0]:
                 continue
@@ -85,10 +90,14 @@ def collect(interests: Interests) -> list[Item]:
                 text=f"{sender}: {body}",
                 score=0,
                 author=sender,
-                created=msg.get("Date", ""),
+                created=msg.get("Date", ""),  # the email's date — history is dated
                 extra={"newsletter": True},
             ))
         conn.logout()
     except Exception as exc:  # noqa: BLE001 - never break the run
         warn(SOURCE, exc)
     return items
+
+
+def collect(interests: Interests) -> list[Item]:
+    return fetch(interests.gmail_query, MAX_EMAILS)

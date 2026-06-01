@@ -84,6 +84,6 @@ jobs:
         run: |
           git config user.name "content-radar[bot]"
           git config user.email "actions@users.noreply.github.com"
-          git add -f digests/ drafts/ store/raw/
-          git commit -m "radar: digest + drafts + corpus for $(date -u +%F)" || { echo "nothing new"; exit 0; }
+          git add -f digests/ drafts/
+          git commit -m "radar: digest + drafts for $(date -u +%F)" || { echo "nothing new"; exit 0; }
           git push

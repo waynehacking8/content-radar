@@ -61,6 +61,35 @@ def cmd_index(args) -> None:
     print(f"indexed {n} items into Qdrant collection '{rag.COLLECTION}'.")
 
 
+def cmd_import(args) -> None:
+    config.load_env()
+    import json
+    from pathlib import Path
+    from . import rag
+    from .collectors import gmail_imap
+
+    items = gmail_imap.fetch(args.query, limit=args.limit)
+    print(f"fetched {len(items)} emails matching {args.query!r}")
+    if not items:
+        return
+    # persist to a dated, committed corpus archive (dedup by message id)
+    archive = Path(config.STORE_DIR) / "raw" / "gmail-archive.json"
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    existing = json.loads(archive.read_text(encoding="utf-8")) if archive.exists() else []
+    seen = {d["id"] for d in existing}
+    merged = existing + [it.to_dict() for it in items if it.id not in seen]
+    archive.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"corpus archive now holds {len(merged)} emails -> {archive}")
+    dated = sorted((it.created for it in items if it.created))
+    if dated:
+        print(f"date range: {dated[0]}  ..  {dated[-1]}")
+    if rag.configured():
+        print(f"embedding + indexing {len(items)} into Qdrant ...")
+        print(f"indexed {rag.index_items(items)} into Qdrant.")
+    else:
+        print("Qdrant not configured — saved to corpus only.")
+
+
 def cmd_show(args) -> None:
     items = load_day(config.STORE_DIR, _today())
     if not items:
@@ -154,6 +183,11 @@ def build_parser() -> argparse.ArgumentParser:
     ix = sub.add_parser("index", help="embed + upsert items into the Qdrant knowledge base")
     ix.add_argument("--all", action="store_true", help="backfill the whole corpus (else today)")
     ix.set_defaults(func=cmd_index)
+
+    im = sub.add_parser("import", help="import a Gmail newsletter archive (e.g. all AINews) into the KB")
+    im.add_argument("--query", default="subject:AINews", help="Gmail-syntax search")
+    im.add_argument("--limit", type=int, default=1000, help="max emails to fetch")
+    im.set_defaults(func=cmd_import)
 
     y = sub.add_parser("synthesize", help="draft posts from today's signal via Claude")
     y.add_argument("--out", default="./drafts", help="output dir for draft .md files")

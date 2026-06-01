@@ -55,7 +55,7 @@ def recent_digests(digests_dir: Path, n: int = 2) -> str:
 
 def build_chat_prompt(question: str, items: list[Item], digest_text: str) -> str:
     ctx = "\n".join(
-        f"- [{i.source}|score {i.score}] {i.title}\n  {i.url}\n  {(i.text or '')[:300]}"
+        f"- [{i.source} · {i.created or 'n/a'}] {i.title}\n  {i.url}\n  {(i.text or '')[:300]}"
         for i in items
     )
     return (
