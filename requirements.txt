@@ -4,6 +4,9 @@ beautifulsoup4>=4.12
 python-dotenv>=1.0
 pytest>=8.0
 
+# Knowledge base: vector retrieval with Qdrant + local fastembed embeddings.
+qdrant-client[fastembed]>=1.12
+
 # Synthesis uses the local `claude` CLI on your subscription by default (no key).
 # Only install this if you want the optional --backend api (pay-per-token):
 #   anthropic>=0.40

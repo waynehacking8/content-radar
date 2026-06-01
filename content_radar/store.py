@@ -33,7 +33,9 @@ def merge(existing: Iterable[Item], incoming: Iterable[Item]) -> tuple[Item, ...
     by_key: dict[str, Item] = {}
     for item in list(existing) + list(incoming):
         current = by_key.get(item.key)
-        if current is None or item.score > current.score:
+        # >= so a re-processed item (e.g. enriched with full text, same score)
+        # overwrites the earlier copy; incoming is appended after existing.
+        if current is None or item.score >= current.score:
             by_key[item.key] = item
     return tuple(sorted(by_key.values(), key=lambda i: i.score, reverse=True))
 

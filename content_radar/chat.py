@@ -10,7 +10,7 @@ import datetime as _dt
 import re
 from pathlib import Path
 
-from . import config
+from . import config, kb, rag
 from .models import Item
 from .store import load_day
 from .synthesize import run_claude_cli
@@ -73,12 +73,15 @@ def build_chat_prompt(question: str, items: list[Item], digest_text: str) -> str
 
 
 def answer(question: str, *, store_dir: Path | None = None, digests_dir: Path | None = None,
-           model: str | None = None, days: int = 7, k: int = 20) -> str:
+           model: str | None = None, k: int = 25) -> str:
     store_dir = store_dir or config.STORE_DIR
     digests_dir = digests_dir or config.DIGESTS_DIR
     model = model or config.synth_model()
-    today = _dt.date.today()
-    items = _recent_items(store_dir, days, today)
-    chosen = relevant_items(items, question, k)
+    # Industry-standard vector retrieval (Qdrant + fastembed) when configured,
+    # else local SQLite FTS over the committed corpus.
+    if rag.configured():
+        chosen = rag.search(question, limit=k)
+    else:
+        chosen = kb.search(kb.get_index(store_dir), question, limit=k)
     prompt = build_chat_prompt(question, chosen, recent_digests(digests_dir))
     return run_claude_cli(prompt, model)

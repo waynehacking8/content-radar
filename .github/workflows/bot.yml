@@ -34,15 +34,17 @@ jobs:
           pip install -r requirements.txt
           npm install -g @anthropic-ai/claude-code
 
-      - name: Warm the radar (fresh free-source signal for this session)
-        env:
-          GMAIL_USER: ${{ secrets.GMAIL_USER }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        run: python -m content_radar.cli collect --sources hackernews github arxiv gmail || true
+      - name: Cache fastembed model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/fastembed
+          key: fastembed-bge-small
 
       - name: Run bot (continuous long-poll, ~5h40m then auto-restart)
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ALLOWED_CHAT_IDS: ${{ secrets.TELEGRAM_ALLOWED_CHAT_IDS }}
+          QDRANT_URL: ${{ secrets.QDRANT_URL }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
         run: timeout 20400 python -m content_radar.telegram_bot || true

@@ -34,6 +34,33 @@ def cmd_collect(args) -> None:
     print(f"saved -> {path}")
 
 
+def cmd_enrich(args) -> None:
+    config.load_env()
+    from .enrich import enrich_items
+    items = list(load_day(config.STORE_DIR, _today()))
+    if not items:
+        raise SystemExit("nothing collected today. run `collect` first.")
+    print(f"enriching up to {args.top} items (fetching full article text) ...")
+    enriched = enrich_items(items, top_n=args.top)
+    save_day(config.STORE_DIR, _today(), enriched)
+    print("saved enriched items back to the corpus.")
+
+
+def cmd_index(args) -> None:
+    config.load_env()
+    from . import rag
+    if not rag.configured():
+        raise SystemExit("set QDRANT_URL + QDRANT_API_KEY to index into Qdrant.")
+    if args.all:
+        from .kb import load_corpus
+        items = load_corpus(config.STORE_DIR)
+    else:
+        items = list(load_day(config.STORE_DIR, _today()))
+    print(f"embedding + upserting {len(items)} items into Qdrant ...")
+    n = rag.index_items(items)
+    print(f"indexed {n} items into Qdrant collection '{rag.COLLECTION}'.")
+
+
 def cmd_show(args) -> None:
     items = load_day(config.STORE_DIR, _today())
     if not items:
@@ -119,6 +146,14 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("show", help="print what was collected today")
     s.add_argument("--top", type=int, default=30)
     s.set_defaults(func=cmd_show)
+
+    e = sub.add_parser("enrich", help="fetch full article text into today's corpus")
+    e.add_argument("--top", type=int, default=50, help="how many items to enrich")
+    e.set_defaults(func=cmd_enrich)
+
+    ix = sub.add_parser("index", help="embed + upsert items into the Qdrant knowledge base")
+    ix.add_argument("--all", action="store_true", help="backfill the whole corpus (else today)")
+    ix.set_defaults(func=cmd_index)
 
     y = sub.add_parser("synthesize", help="draft posts from today's signal via Claude")
     y.add_argument("--out", default="./drafts", help="output dir for draft .md files")
