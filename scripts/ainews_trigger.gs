@@ -36,11 +36,14 @@
 var DEFAULTS = {
   WORKFLOW_FILE: 'ainews-watch.yml',
   WORKFLOW_REF: 'main',
+  // in:inbox — GmailApp.search covers All Mail (including Sent), so without it
+  // the query matches our own forwarded 中文版 copies and re-dispatches forever.
+  // The Python side only searches INBOX over IMAP; this keeps both consistent.
   // 2d window (not 1d): if this trigger breaks for a day (expired PAT, outage),
   // the next working check still catches yesterday's issue. The radar-forwarded
   // label — not this window — is what prevents duplicate sends.
   // Keep in sync with AINEWS_FRESH_WINDOW in content_radar/config.py.
-  GMAIL_QUERY: 'subject:AINews newer_than:2d -label:radar-forwarded',
+  GMAIL_QUERY: 'in:inbox subject:AINews newer_than:2d -label:radar-forwarded',
 };
 
 function checkAINews() {
