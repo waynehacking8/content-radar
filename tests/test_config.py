@@ -27,7 +27,10 @@ def test_ainews_watch_query_is_fresh_and_dedup_aware_by_default(monkeypatch):
     monkeypatch.delenv("AINEWS_FORWARDED_LABEL", raising=False)
     q = config.ainews_watch_query()
     assert "subject:AINews" in q
-    assert "newer_than:1d" in q                       # only today's issue, never a stale one
+    # Window must be wider than 1 day so a broken trigger can catch up next day,
+    # and must come from config (no hardcoded duplicates drifting apart).
+    assert f"newer_than:{config.AINEWS_FRESH_WINDOW}" in q
+    assert config.AINEWS_FRESH_WINDOW != "1d"
     assert f"-label:{config.DEFAULT_AINEWS_FORWARDED_LABEL}" in q  # skip already-forwarded
 
 

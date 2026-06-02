@@ -3,26 +3,34 @@ name: ainews-watch
 # Forward AINews the moment it arrives — not at a fixed hour.
 #
 # The newsletter lands at an unpredictable time (~03:00–08:00 UTC / 11:00–16:00
-# Taipei). GitHub Actions can't listen for Gmail pushes, so this polls cheaply
-# through the arrival window:
+# Taipei). Two triggers feed this workflow:
+#
+#   PRIMARY — Google Apps Script push (scripts/ainews_trigger.gs): checks Gmail
+#   every 10 min on Google's reliable trigger and fires workflow_dispatch the
+#   moment an unforwarded issue exists. workflow_dispatch starts within seconds.
+#
+#   FALLBACK — the cron below. GitHub cron on this repo lags 3–6 hours behind
+#   schedule (measured), so it's only a safety net for the day Apps Script breaks.
+#
+# Either way the job is the same:
 #
 #   1. Light check (~30s, stdlib + tiny deps): is there a fresh AINews that
-#      hasn't been forwarded yet?  Most polls end here.
+#      hasn't been forwarded yet?  Empty checks end here.
 #   2. Only when one is found: install the full stack, translate it to 繁中 with
 #      Claude (on your subscription), email it, and index it into the Qdrant
 #      knowledge base so the chat bot can answer questions about it same-day.
 #
 # Dedup lives in Gmail itself: a successful forward labels the original mail
-# (radar-forwarded), and the watch query excludes that label. Every poll is
+# (radar-forwarded), and the watch query excludes that label. Every run is
 # idempotent — no state files, no duplicate sends.
 
 on:
   schedule:
-    # Every 30 min, 02:00–09:30 UTC = 10:00–17:30 Taipei (covers the arrival
-    # window with margin). GitHub cron is best-effort; a skipped run is fine —
-    # the next poll picks the mail up.
+    # Fallback only (see above): every 30 min, 02:00–09:30 UTC = 10:00–17:30
+    # Taipei. Expect these to fire hours late; the Apps Script push is what
+    # actually delivers "forward on arrival".
     - cron: "*/30 2-9 * * *"
-  workflow_dispatch: {}    # manual run from the Actions tab anytime
+  workflow_dispatch: {}    # fired by scripts/ainews_trigger.gs, or manually from the Actions tab
 
 permissions:
   contents: read

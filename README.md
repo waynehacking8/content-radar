@@ -134,11 +134,17 @@ subscription**, not an API key:
 - **`.github/workflows/radar.yml`** — daily at 08:00 Taipei: collect → enrich →
   index → digest → drafts, committed back to the repo for review.
 - **`.github/workflows/ainews-watch.yml`** — AINews lands at an unpredictable
-  time (11:00–16:00 Taipei), so this polls Gmail every 30 min through the
-  arrival window and, the moment a fresh issue shows up, translates it to 繁中,
-  emails it, and indexes it into the KB. Dedup lives in Gmail (a
-  `radar-forwarded` label on processed mail), so polls are idempotent — empty
-  polls finish in ~30s without installing the heavy stack.
+  time (11:00–16:00 Taipei). The moment a fresh issue shows up, this translates
+  it to 繁中, emails it, and indexes it into the KB. Dedup lives in Gmail (a
+  `radar-forwarded` label on processed mail), so runs are idempotent — empty
+  checks finish in ~30s without installing the heavy stack.
+
+  **How it gets triggered on time:** GitHub cron is best-effort and can lag
+  hours behind schedule, so the punctual trigger is
+  **`scripts/ainews_trigger.gs`** — a ~60-line Google Apps Script that checks
+  Gmail natively every 10 min and fires `workflow_dispatch` (which starts
+  within seconds) when an unforwarded issue exists. The workflow's own cron
+  stays as a delayed fallback. Setup steps are in the header of the `.gs` file.
 
 Setup:
 
@@ -205,7 +211,9 @@ content_radar/
   watch.py             # AINews watcher: forward on arrival, dedup via Gmail label
   eval_qa.py           # LLM-as-judge QA harness (generate questions, score answers)
   cli.py               # collect / show / enrich / index / import / digest / synthesize / check-ainews / email-digest / eval
-tests/                 # 73 tests (python -m pytest)
+scripts/
+  ainews_trigger.gs    # Google Apps Script: punctual Gmail check → workflow_dispatch (GH cron is hours late)
+tests/                 # 76 tests (python -m pytest)
 ```
 
 ### How it matches AINews
@@ -219,7 +227,7 @@ tests/                 # 73 tests (python -m pytest)
 | Searchable archive of every past issue | **Qdrant vector KB** (`rag.py`) — every day's signal auto-indexed |
 | Ask it anything, grounded | **繁中 chat bot** (`chat.py` + `telegram_bot.py`), RAG + WebSearch fallback |
 | Daily, automated | GitHub Actions on your subscription |
-| Lands in your inbox when it's fresh | `watch.py` + `ainews-watch.yml`: forwarded (繁中) within ~30 min of arrival |
+| Lands in your inbox when it's fresh | `watch.py` + `ainews-watch.yml` + Apps Script push: forwarded (繁中) within ~10 min of arrival |
 
 ## Design notes
 

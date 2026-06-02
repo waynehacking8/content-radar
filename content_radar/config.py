@@ -103,6 +103,11 @@ DEFAULT_AINEWS_FORWARDED_LABEL = "radar-forwarded"
 # Subject suffix for the forwarded Traditional-Chinese edition.
 ZH_SUBJECT_SUFFIX = " — 中文版"
 
+# How far back the watcher looks for an unforwarded issue. Wider than 1 day so
+# a broken trigger (expired PAT, Apps Script outage) can still catch up the
+# next day — the radar-forwarded label, not this window, prevents re-sends.
+AINEWS_FRESH_WINDOW = "2d"
+
 
 def ainews_forwarded_label() -> str:
     return (os.environ.get("AINEWS_FORWARDED_LABEL", DEFAULT_AINEWS_FORWARDED_LABEL).strip()
@@ -111,7 +116,8 @@ def ainews_forwarded_label() -> str:
 
 def ainews_watch_query() -> str:
     """Gmail search for 'a fresh AINews that has not been forwarded yet'."""
-    default = f"subject:AINews newer_than:1d -label:{ainews_forwarded_label()}"
+    default = (f"subject:AINews newer_than:{AINEWS_FRESH_WINDOW} "
+               f"-label:{ainews_forwarded_label()}")
     return os.environ.get("AINEWS_WATCH_QUERY", default).strip() or default
 
 
