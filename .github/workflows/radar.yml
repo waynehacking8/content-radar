@@ -75,13 +75,9 @@ jobs:
         # --enrich: fetch article text for top links; --best-of: pick best of N
         run: python -m content_radar.cli digest --out digests --themes 5 --enrich 12 --best-of 2
 
-      - name: Email the latest AINews newsletter, fully translated to 繁中
-        env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          GMAIL_USER: ${{ secrets.GMAIL_USER }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          DIGEST_EMAIL_TO: ${{ vars.DIGEST_EMAIL_TO }}   # optional; defaults to waynehacking8@gmail.com
-        run: python -m content_radar.cli email-digest || echo "email skipped (no AINews mail / no creds)"
+      # NOTE: AINews forwarding moved to ainews-watch.yml — the newsletter lands
+      # at 11:00–16:00 Taipei, long after this 08:00 run, so a fixed-hour forward
+      # could only ever send yesterday's issue. The watcher forwards on arrival.
 
       - name: Synthesize post drafts (Claude on subscription)
         env:

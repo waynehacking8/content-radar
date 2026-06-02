@@ -89,6 +89,37 @@ def digest_email_to() -> str:
     return os.environ.get("DIGEST_EMAIL_TO", DEFAULT_DIGEST_EMAIL_TO).strip() or DEFAULT_DIGEST_EMAIL_TO
 
 
+# Default Gmail search for "the latest AINews issue" (the email-digest command).
+DEFAULT_AINEWS_QUERY = "subject:AINews"
+
+# ── AINews watcher ───────────────────────────────────────────────────────────
+# The newsletter lands at an unpredictable time (~03:00–08:00 UTC / 11:00–16:00
+# Taipei), so a polling workflow (.github/workflows/ainews-watch.yml) forwards
+# it on arrival instead of at a fixed hour. Dedup state lives in Gmail itself:
+# a successful forward labels the original mail, and the watch query excludes
+# that label — every poll is idempotent, no state files.
+DEFAULT_AINEWS_FORWARDED_LABEL = "radar-forwarded"
+
+# Subject suffix for the forwarded Traditional-Chinese edition.
+ZH_SUBJECT_SUFFIX = " — 中文版"
+
+
+def ainews_forwarded_label() -> str:
+    return (os.environ.get("AINEWS_FORWARDED_LABEL", DEFAULT_AINEWS_FORWARDED_LABEL).strip()
+            or DEFAULT_AINEWS_FORWARDED_LABEL)
+
+
+def ainews_watch_query() -> str:
+    """Gmail search for 'a fresh AINews that has not been forwarded yet'."""
+    default = f"subject:AINews newer_than:1d -label:{ainews_forwarded_label()}"
+    return os.environ.get("AINEWS_WATCH_QUERY", default).strip() or default
+
+
+def forwarded_subject(title: str) -> str:
+    """Subject line of the forwarded Chinese edition."""
+    return f"{title}{ZH_SUBJECT_SUFFIX}"
+
+
 # Where the chat bot reads the latest digest from. Fetching over HTTP (raw
 # GitHub) makes "today's digest" live — the bot sees a new digest within the
 # CDN cache window (~5 min) instead of waiting for its next 6-hourly restart to

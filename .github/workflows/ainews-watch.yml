@@ -1,0 +1,85 @@
+name: ainews-watch
+
+# Forward AINews the moment it arrives — not at a fixed hour.
+#
+# The newsletter lands at an unpredictable time (~03:00–08:00 UTC / 11:00–16:00
+# Taipei). GitHub Actions can't listen for Gmail pushes, so this polls cheaply
+# through the arrival window:
+#
+#   1. Light check (~30s, stdlib + tiny deps): is there a fresh AINews that
+#      hasn't been forwarded yet?  Most polls end here.
+#   2. Only when one is found: install the full stack, translate it to 繁中 with
+#      Claude (on your subscription), email it, and index it into the Qdrant
+#      knowledge base so the chat bot can answer questions about it same-day.
+#
+# Dedup lives in Gmail itself: a successful forward labels the original mail
+# (radar-forwarded), and the watch query excludes that label. Every poll is
+# idempotent — no state files, no duplicate sends.
+
+on:
+  schedule:
+    # Every 30 min, 02:00–09:30 UTC = 10:00–17:30 Taipei (covers the arrival
+    # window with margin). GitHub cron is best-effort; a skipped run is fine —
+    # the next poll picks the mail up.
+    - cron: "*/30 2-9 * * *"
+  workflow_dispatch: {}    # manual run from the Actions tab anytime
+
+permissions:
+  contents: read
+
+# Never two forwards at once (a late cron run could overlap the next one).
+concurrency:
+  group: ainews-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Light check first — pure-Python deps only, no claude/qdrant/fastembed.
+      - name: Check for a fresh, unforwarded AINews
+        id: check
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          pip install --quiet python-dotenv beautifulsoup4 requests feedparser
+          python -m content_radar.cli check-ainews
+
+      # ── Everything below only runs when a new issue is waiting ──────────────
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.found == 'true'
+        with:
+          node-version: "20"
+
+      - name: Install full dependencies
+        if: steps.check.outputs.found == 'true'
+        run: |
+          pip install -r requirements.txt
+          npm install -g @anthropic-ai/claude-code
+
+      - name: Cache fastembed model
+        if: steps.check.outputs.found == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/fastembed
+          key: fastembed-e5-large-jina-v2
+
+      - name: Translate to 繁中, forward, and index into the knowledge base
+        if: steps.check.outputs.found == 'true'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          DIGEST_EMAIL_TO: ${{ vars.DIGEST_EMAIL_TO }}   # optional; defaults to waynehacking8@gmail.com
+          QDRANT_URL: ${{ secrets.QDRANT_URL }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+        run: python -m content_radar.cli email-digest --if-new --index

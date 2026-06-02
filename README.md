@@ -12,7 +12,7 @@ collectors ──▶ dated JSON store (dedup) ──▶ │
         │                                   │
         └──▶ enrich (full text) ──▶ Qdrant  ├──▶ Telegram chat bot (繁中, RAG + WebSearch)
              vector KB (e5 + BM25 + rerank) │
-                                            └──▶ daily AINews → 繁中 email
+                                            └──▶ AINews → 繁中 email (forwarded on arrival)
 ```
 
 Two model layers: **retrieval runs locally for free** (fastembed: e5-large dense +
@@ -128,15 +128,25 @@ question, it falls back to **WebSearch** and attributes the web sources.
 
 ## Automation (runs with your laptop off)
 
-`.github/workflows/radar.yml` runs daily on GitHub's servers and commits the digest
-+ drafts back to the repo for review. It authenticates with **your subscription**,
-not an API key:
+Two workflows run on GitHub's servers, both authenticating with **your
+subscription**, not an API key:
+
+- **`.github/workflows/radar.yml`** — daily at 08:00 Taipei: collect → enrich →
+  index → digest → drafts, committed back to the repo for review.
+- **`.github/workflows/ainews-watch.yml`** — AINews lands at an unpredictable
+  time (11:00–16:00 Taipei), so this polls Gmail every 30 min through the
+  arrival window and, the moment a fresh issue shows up, translates it to 繁中,
+  emails it, and indexes it into the KB. Dedup lives in Gmail (a
+  `radar-forwarded` label on processed mail), so polls are idempotent — empty
+  polls finish in ~30s without installing the heavy stack.
+
+Setup:
 
 1. Locally: `claude setup-token` → copies a 1-year subscription token (works on
    monthly Pro/Max).
 2. Repo → Settings → Secrets and variables → Actions → add `CLAUDE_CODE_OAUTH_TOKEN`
    (and optionally `TWITTERAPI_IO_KEY`, `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`).
-3. Trigger it from the Actions tab, or wait for the daily schedule.
+3. Trigger them from the Actions tab, or wait for the schedules.
 
 Each draft is a Markdown file with YAML front matter:
 
@@ -191,10 +201,11 @@ content_radar/
   synthesize.py        # claude CLI backend (subscription; tools off by default)
   chat.py              # RAG chat: retrieve → answer in 繁中, WebSearch fallback on KB gaps
   telegram_bot.py      # long-poll Telegram bot over chat.py (serverless, no own host)
-  mailer.py            # Gmail SMTP: daily 繁中 AINews edition
+  mailer.py            # Gmail SMTP: 繁中 AINews edition
+  watch.py             # AINews watcher: forward on arrival, dedup via Gmail label
   eval_qa.py           # LLM-as-judge QA harness (generate questions, score answers)
-  cli.py               # collect / show / enrich / index / import / digest / synthesize / email-digest / eval
-tests/                 # 47 tests (python -m pytest)
+  cli.py               # collect / show / enrich / index / import / digest / synthesize / check-ainews / email-digest / eval
+tests/                 # 73 tests (python -m pytest)
 ```
 
 ### How it matches AINews
@@ -208,6 +219,7 @@ tests/                 # 47 tests (python -m pytest)
 | Searchable archive of every past issue | **Qdrant vector KB** (`rag.py`) — every day's signal auto-indexed |
 | Ask it anything, grounded | **繁中 chat bot** (`chat.py` + `telegram_bot.py`), RAG + WebSearch fallback |
 | Daily, automated | GitHub Actions on your subscription |
+| Lands in your inbox when it's fresh | `watch.py` + `ainews-watch.yml`: forwarded (繁中) within ~30 min of arrival |
 
 ## Design notes
 

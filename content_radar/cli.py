@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import os
 
 from . import config
 from .collectors import REGISTRY, collect_all
-from .models import Item
 from .store import load_day, save_day
 
 
@@ -107,27 +107,77 @@ def cmd_eval(args) -> None:
     run(qs, out_path=args.out)
 
 
+def cmd_check_ainews(args) -> None:
+    """Light poll for the AINews watcher: is a fresh, unforwarded newsletter waiting?
+
+    Designed for CI — writes `found=true|false` to $GITHUB_OUTPUT so the workflow
+    only installs the heavy translation/indexing stack when there is real work.
+    """
+    config.load_env()
+    from . import watch
+
+    n = watch.pending_count(args.query or None)
+    found = "true" if n > 0 else "false"
+    print(f"{n} fresh unforwarded newsletter(s) -> found={found}")
+    gh_output = os.environ.get("GITHUB_OUTPUT")
+    if gh_output:
+        with open(gh_output, "a", encoding="utf-8") as fh:
+            fh.write(f"found={found}\n")
+
+
 def cmd_email_digest(args) -> None:
     config.load_env()
     from . import mailer
-    from .collectors import gmail_imap
     from .digest import chinese_newsletter_markdown
 
     if not mailer.configured():
         raise SystemExit("set GMAIL_USER + GMAIL_APP_PASSWORD to send the digest email.")
+
     # Pull the latest AINews newsletter in FULL (no digest truncation), so the
     # Chinese edition mirrors the original's depth section-for-section.
-    items = gmail_imap.fetch(args.query, limit=1, max_chars=args.max_chars)
-    if not items:
-        raise SystemExit(f"no email matched {args.query!r} in the inbox.")
-    src = items[0]
+    if args.if_new:
+        # Watcher mode: only a fresh issue that has not been forwarded yet
+        # (dedup via Gmail label — see content_radar.watch). Nothing new is a
+        # normal outcome for a poll, so exit 0 quietly.
+        from . import watch
+        src = watch.find_unforwarded(args.query or None, max_chars=args.max_chars)
+        if src is None:
+            print("no fresh, unforwarded AINews — nothing to do.")
+            return
+    else:
+        from .collectors import gmail_imap
+        query = args.query or config.DEFAULT_AINEWS_QUERY
+        items = gmail_imap.fetch(query, limit=1, max_chars=args.max_chars)
+        if not items:
+            raise SystemExit(f"no email matched {query!r} in the inbox.")
+        src = items[0]
+
     body = src.text.split(": ", 1)[-1] if ": " in src.text[:80] else src.text
     print(f"translating '{src.title}' ({len(body)} chars) to Traditional Chinese "
           f"via {config.synth_model()} ...")
     zh = chinese_newsletter_markdown(body, config.synth_model())
-    subject = f"{src.title} — 中文版"
+    subject = config.forwarded_subject(src.title)
     to = mailer.send_markdown_email(subject, zh, to_addr=args.to or None)
     print(f"sent '{subject}' ({len(zh)} chars) -> {to}")
+
+    if args.if_new:
+        # Label only AFTER the send succeeded, so a failed run retries next poll.
+        from . import watch
+        if watch.mark_forwarded(src):
+            print(f"labelled original as '{config.ainews_forwarded_label()}' (dedup marker).")
+        else:
+            print("WARNING: could not label the original — the next poll may resend it.")
+
+    if args.index:
+        # Same-day knowledge base: the chat bot can answer questions about this
+        # issue immediately instead of waiting for tomorrow's collect+index run.
+        # point_id() is deterministic, so tomorrow's run just upserts over this.
+        from . import rag
+        if rag.configured():
+            n = rag.index_items([src])
+            print(f"indexed {n} chunk(s) into the knowledge base.")
+        else:
+            print("Qdrant not configured — skipping index.")
 
 
 def cmd_show(args) -> None:
@@ -245,10 +295,22 @@ def build_parser() -> argparse.ArgumentParser:
                    help="cli = your Claude subscription (default); api = pay-per-token key")
     y.set_defaults(func=cmd_synthesize)
 
+    ck = sub.add_parser("check-ainews",
+                        help="cheap poll: is a fresh, unforwarded AINews waiting? (for CI)")
+    ck.add_argument("--query", default="",
+                    help="Gmail-syntax search override (default: the dedup-aware watch query)")
+    ck.set_defaults(func=cmd_check_ainews)
+
     me = sub.add_parser("email-digest",
                         help="email the latest AINews newsletter, fully translated to 繁中")
-    me.add_argument("--query", default="subject:AINews",
-                    help="Gmail-syntax search for the newsletter to translate")
+    me.add_argument("--query", default="",
+                    help="Gmail-syntax search override (default: latest AINews; with "
+                         "--if-new: the dedup-aware watch query)")
+    me.add_argument("--if-new", action="store_true", dest="if_new",
+                    help="watcher mode: only translate+send a fresh issue that hasn't "
+                         "been forwarded yet; exit 0 quietly otherwise")
+    me.add_argument("--index", action="store_true",
+                    help="also index the newsletter into the Qdrant knowledge base")
     me.add_argument("--max-chars", type=int, default=60_000, dest="max_chars",
                     help="max source chars to translate (full newsletter)")
     me.add_argument("--to", default="", help="recipient (default: DIGEST_EMAIL_TO env)")
