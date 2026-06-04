@@ -16,12 +16,15 @@ Qdrant Cloud. Falls back to local SQLite FTS (kb.py) when Qdrant isn't set.
 from __future__ import annotations
 
 import datetime as _dt
+import logging
 import os
 import uuid
 
 from .chunk import chunk_text
 from .models import Item
 from .temporal import TemporalIntent, TemporalTier
+
+_log = logging.getLogger(__name__)
 
 COLLECTION = "radar"
 EMBED_MODEL = "intfloat/multilingual-e5-large"     # dense, multilingual
@@ -77,17 +80,15 @@ def ensure_datetime_index() -> None:
     )
 
 
-def _build_query_filter(intent: TemporalIntent):
+def _build_query_filter(intent: TemporalIntent) -> "models.Filter | None":
     """Translate a TemporalIntent into a Qdrant Filter (or None)."""
     if intent.tier == TemporalTier.NONE or intent.date_from is None:
         return None
     from qdrant_client import models
-    conditions = []
-    if intent.date_from is not None:
-        conditions.append(models.FieldCondition(
-            key="created",
-            range=models.DatetimeRange(gte=intent.date_from.isoformat()),
-        ))
+    conditions = [models.FieldCondition(
+        key="created",
+        range=models.DatetimeRange(gte=intent.date_from.isoformat()),
+    )]
     if intent.date_to is not None:
         conditions.append(models.FieldCondition(
             key="created",
@@ -152,6 +153,10 @@ def search(
     metas = [m for m in metas if m.get("chunk")]
 
     if len(metas) < _FILTERED_FALLBACK_MIN and qf is not None:
+        _log.warning(
+            "Temporal filter returned %d results (< %d); retrying without date filter",
+            len(metas), _FILTERED_FALLBACK_MIN,
+        )
         hits = client.query(
             collection_name=COLLECTION, query_text=query, limit=prefetch,
         )

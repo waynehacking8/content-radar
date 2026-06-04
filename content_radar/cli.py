@@ -85,6 +85,7 @@ def cmd_import(args) -> None:
     if dated:
         print(f"date range: {dated[0]}  ..  {dated[-1]}")
     if rag.configured():
+        rag.ensure_datetime_index()
         print(f"embedding + indexing {len(items)} into Qdrant ...")
         print(f"indexed {rag.index_items(items)} into Qdrant.")
     else:
@@ -175,6 +176,7 @@ def cmd_email_digest(args) -> None:
         # point_id() is deterministic, so tomorrow's run just upserts over this.
         from . import rag
         if rag.configured():
+            rag.ensure_datetime_index()
             n = rag.index_items([src])
             print(f"indexed {n} chunk(s) into the knowledge base.")
         else:

@@ -79,6 +79,7 @@ def test_email_digest_if_new_translates_sends_marks_and_indexes(monkeypatch, cap
     monkeypatch.setattr("content_radar.watch.mark_forwarded",
                         lambda it: events.append("mark") or True)
     monkeypatch.setattr("content_radar.rag.configured", lambda: True)
+    monkeypatch.setattr("content_radar.rag.ensure_datetime_index", lambda: None)
     monkeypatch.setattr("content_radar.rag.index_items",
                         lambda items: events.append(("index", [it.id for it in items])) or 3)
 

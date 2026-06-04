@@ -20,6 +20,7 @@ _STOPWORDS = {
     "the", "and", "for", "what", "whats", "with", "this", "that", "how", "why",
     "are", "was", "were", "has", "have", "about", "tell", "show", "give", "any",
     "new", "news", "latest", "today", "did", "does", "can", "you", "your",
+    "的", "了", "是", "在", "和", "也", "都", "但", "與", "及",
 }
 
 # Agentic tool the model may use to fill knowledge-base gaps from the live web.
