@@ -140,8 +140,12 @@ def search(
 
     When *temporal_intent* carries a date range (EXPLICIT or IMPLICIT tier),
     a Qdrant DatetimeRange payload filter restricts candidates to that window.
-    If the filtered result set is too small (< _FILTERED_FALLBACK_MIN), the
-    search is retried without the filter to avoid empty answers.
+
+    Fallback policy:
+      EXPLICIT ("today", "昨天") — never fallback. If today has no data, the
+        LLM should say so rather than silently serving stale news.
+      IMPLICIT ("latest", "最新") — fallback to unfiltered search when the
+        filtered set is too small, since the user's intent is softer.
     """
     client = _client()
     qf = _build_query_filter(temporal_intent) if temporal_intent else None
@@ -152,7 +156,11 @@ def search(
     metas = [getattr(h, "metadata", None) or {} for h in hits]
     metas = [m for m in metas if m.get("chunk")]
 
-    if len(metas) < _FILTERED_FALLBACK_MIN and qf is not None:
+    allow_fallback = (
+        temporal_intent is not None
+        and temporal_intent.tier == TemporalTier.IMPLICIT
+    )
+    if len(metas) < _FILTERED_FALLBACK_MIN and qf is not None and allow_fallback:
         _log.warning(
             "Temporal filter returned %d results (< %d); retrying without date filter",
             len(metas), _FILTERED_FALLBACK_MIN,
