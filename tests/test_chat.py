@@ -1,7 +1,7 @@
 import datetime as dt
 
 import content_radar.chat as chat_mod
-from content_radar.chat import build_chat_prompt, recent_digests, relevant_items
+from content_radar.chat import _terms, build_chat_prompt, recent_digests, relevant_items
 from content_radar.models import Item
 
 
@@ -53,11 +53,17 @@ def test_relevant_items_falls_back_to_score_when_no_terms_match():
 
 def test_build_chat_prompt_includes_question_and_sources():
     items = [_item("1", "NVIDIA news", text="kernels open sourced")]
-    prompt = build_chat_prompt("nvidia?", items, "DIGEST TEXT HERE")
+    prompt = build_chat_prompt("nvidia?", items, "DIGEST TEXT HERE",
+                               today=dt.date(2026, 6, 4))
     assert "nvidia?" in prompt
     assert "NVIDIA news" in prompt
     assert "DIGEST TEXT HERE" in prompt
     assert "http://x/1" in prompt
+
+
+def test_build_chat_prompt_injects_today_date():
+    prompt = build_chat_prompt("q", [], "", today=dt.date(2026, 6, 4))
+    assert "Today is 2026-06-04 (UTC)" in prompt
 
 
 def test_build_chat_prompt_kb_only_does_not_invite_web_search():
@@ -99,3 +105,36 @@ def test_answer_passes_websearch_tool_only_when_web_fallback(monkeypatch):
     chat_mod.answer("q", web_fallback=False)
     assert captured["allowed_tools"] is None
     assert captured["timeout"] == 300
+
+
+def test_terms_captures_chinese_and_latin():
+    terms = _terms("今天的AI新聞")
+    assert "ai" in terms
+    assert "新聞" in terms or "今天" in terms
+
+
+def test_terms_filters_stopwords():
+    terms = _terms("what is the latest news today")
+    assert "latest" not in terms
+    assert "today" not in terms
+    assert "news" not in terms
+
+
+def test_answer_passes_temporal_intent_to_rag(monkeypatch):
+    captured = {}
+
+    def fake_rag_search(query, limit=12, temporal_intent=None, **kw):
+        captured["temporal_intent"] = temporal_intent
+        return []
+
+    monkeypatch.setattr(chat_mod, "run_claude_cli",
+                        lambda p, m, timeout=300, allowed_tools=None: "ok")
+    monkeypatch.setattr(chat_mod.rag, "configured", lambda: True)
+    monkeypatch.setattr(chat_mod.rag, "search", fake_rag_search)
+    monkeypatch.setattr(chat_mod, "recent_digests", lambda _d, n=2: "")
+
+    chat_mod.answer("今天的AI新聞", web_fallback=False)
+    intent = captured["temporal_intent"]
+    assert intent is not None
+    from content_radar.temporal import TemporalTier
+    assert intent.tier == TemporalTier.EXPLICIT

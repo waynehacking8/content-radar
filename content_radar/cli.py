@@ -51,6 +51,7 @@ def cmd_index(args) -> None:
     from . import rag
     if not rag.configured():
         raise SystemExit("set QDRANT_URL + QDRANT_API_KEY to index into Qdrant.")
+    rag.ensure_datetime_index()
     if args.all:
         from .kb import load_corpus
         items = load_corpus(config.STORE_DIR)

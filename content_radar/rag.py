@@ -8,16 +8,20 @@ Pipeline, per current best practice:
   3. Hybrid index: dense multilingual vectors (e5-large) + sparse BM25, fused
      with Reciprocal Rank Fusion in Qdrant.
   4. Cross-encoder rerank (bge-reranker-v2-m3, multilingual) for precision.
+  5. Temporal-aware retrieval: date filtering + recency decay (Perplexity-style
+     freshness weighting at ~40% of ranking signal for news queries).
 Embeddings + rerank run locally via fastembed (no API key); vectors live in
 Qdrant Cloud. Falls back to local SQLite FTS (kb.py) when Qdrant isn't set.
 """
 from __future__ import annotations
 
+import datetime as _dt
 import os
 import uuid
 
 from .chunk import chunk_text
 from .models import Item
+from .temporal import TemporalIntent, TemporalTier
 
 COLLECTION = "radar"
 EMBED_MODEL = "intfloat/multilingual-e5-large"     # dense, multilingual
@@ -56,6 +60,42 @@ def _context_prefix(item: Item) -> str:
     return f"[{item.source} · {date}] {item.title}".strip()
 
 
+def ensure_datetime_index() -> None:
+    """Create a payload index on `created` for efficient DatetimeRange filtering.
+
+    Idempotent — safe to call on every index run. Qdrant's filterable HNSW uses
+    this index to skip non-matching nodes during graph traversal instead of
+    brute-force scanning all payloads.
+    """
+    if not configured():
+        return
+    from qdrant_client import models
+    _client().create_payload_index(
+        collection_name=COLLECTION,
+        field_name="created",
+        field_schema=models.PayloadSchemaType.DATETIME,
+    )
+
+
+def _build_query_filter(intent: TemporalIntent):
+    """Translate a TemporalIntent into a Qdrant Filter (or None)."""
+    if intent.tier == TemporalTier.NONE or intent.date_from is None:
+        return None
+    from qdrant_client import models
+    conditions = []
+    if intent.date_from is not None:
+        conditions.append(models.FieldCondition(
+            key="created",
+            range=models.DatetimeRange(gte=intent.date_from.isoformat()),
+        ))
+    if intent.date_to is not None:
+        conditions.append(models.FieldCondition(
+            key="created",
+            range=models.DatetimeRange(lte=intent.date_to.isoformat()),
+        ))
+    return models.Filter(must=conditions)
+
+
 def index_items(items: list[Item]) -> int:
     if not items or not configured():
         return 0
@@ -85,11 +125,39 @@ def _rerank(query: str, texts: list[str]) -> list[int]:
     return sorted(range(len(texts)), key=lambda i: scores[i], reverse=True)
 
 
-def search(query: str, limit: int = 12, prefetch: int = 40, per_parent: int = 3) -> list[Item]:
-    """Hybrid retrieve -> cross-encoder rerank -> diversified top-k chunks."""
-    hits = _client().query(collection_name=COLLECTION, query_text=query, limit=prefetch)
+_FILTERED_FALLBACK_MIN = 3
+
+
+def search(
+    query: str,
+    limit: int = 12,
+    prefetch: int = 40,
+    per_parent: int = 3,
+    temporal_intent: TemporalIntent | None = None,
+) -> list[Item]:
+    """Hybrid retrieve -> cross-encoder rerank -> diversified top-k chunks.
+
+    When *temporal_intent* carries a date range (EXPLICIT or IMPLICIT tier),
+    a Qdrant DatetimeRange payload filter restricts candidates to that window.
+    If the filtered result set is too small (< _FILTERED_FALLBACK_MIN), the
+    search is retried without the filter to avoid empty answers.
+    """
+    client = _client()
+    qf = _build_query_filter(temporal_intent) if temporal_intent else None
+    hits = client.query(
+        collection_name=COLLECTION, query_text=query,
+        query_filter=qf, limit=prefetch,
+    )
     metas = [getattr(h, "metadata", None) or {} for h in hits]
     metas = [m for m in metas if m.get("chunk")]
+
+    if len(metas) < _FILTERED_FALLBACK_MIN and qf is not None:
+        hits = client.query(
+            collection_name=COLLECTION, query_text=query, limit=prefetch,
+        )
+        metas = [getattr(h, "metadata", None) or {} for h in hits]
+        metas = [m for m in metas if m.get("chunk")]
+
     if not metas:
         return []
     order = _rerank(query, [f"{m.get('title','')} {m['chunk']}" for m in metas])

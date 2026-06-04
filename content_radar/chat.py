@@ -14,6 +14,7 @@ from . import config, kb, rag
 from .models import Item
 from .store import load_day
 from .synthesize import run_claude_cli
+from .temporal import detect_temporal_intent
 
 _STOPWORDS = {
     "the", "and", "for", "what", "whats", "with", "this", "that", "how", "why",
@@ -36,9 +37,12 @@ def _recent_items(store_dir: Path, days: int, today: _dt.date) -> list[Item]:
     return items
 
 
+_TERM_RE = re.compile(r"[a-z0-9]{2,}|[一-鿿㐀-䶿]{1,2}", re.UNICODE)
+
+
 def _terms(question: str) -> list[str]:
-    return [w for w in re.findall(r"[a-z0-9]+", question.lower())
-            if len(w) > 2 and w not in _STOPWORDS]
+    return [w for w in _TERM_RE.findall(question.lower())
+            if w not in _STOPWORDS]
 
 
 def _overlap(item: Item, terms: list[str]) -> int:
@@ -90,15 +94,13 @@ def recent_digests(digests_dir: Path, n: int = 2, *, raw_base: str | None = None
 
 
 def build_chat_prompt(question: str, items: list[Item], digest_text: str,
-                      web_fallback: bool = False) -> str:
-    # Context engineering: full chunk text (no truncation), most relevant first,
-    # each tagged with source + date. The long-context model handles it.
+                      web_fallback: bool = False,
+                      today: _dt.date | None = None) -> str:
+    today = today or _dt.date.today()
     ctx = "\n\n".join(
         f"[{i.source} · {i.created or 'n/a'}] {i.title}\n{i.url}\n{i.text}"
         for i in items
     )
-    # Agentic RAG: prefer the retrieved KB (fast, grounded); only reach for the
-    # web when the KB genuinely can't answer. Keeps well-covered questions instant.
     gap_policy = (
         "Prefer the retrieved context — it is your primary, trusted source. If it "
         "fully covers the question, answer from it WITHOUT searching the web. But if "
@@ -117,6 +119,7 @@ def build_chat_prompt(question: str, items: list[Item], digest_text: str,
         "If the context genuinely doesn't cover it, say so rather than guessing."
     )
     return (
+        f"Today is {today.isoformat()} (UTC). "
         "You are an AI-news assistant. Answer the user's question primarily from the "
         "retrieved context below (the most relevant passages first, each tagged with "
         "its source and date). Be concrete, synthesise across passages, cite sources "
@@ -143,10 +146,9 @@ def answer(question: str, *, store_dir: Path | None = None, digests_dir: Path | 
     digests_dir = digests_dir or config.DIGESTS_DIR
     model = model or config.synth_model()
     web_fallback = config.web_fallback_enabled() if web_fallback is None else web_fallback
-    # Industry-standard vector retrieval (Qdrant + fastembed) when configured,
-    # else local SQLite FTS over the committed corpus.
+    temporal = detect_temporal_intent(question)
     if rag.configured():
-        chosen = rag.search(question, limit=k)
+        chosen = rag.search(question, limit=k, temporal_intent=temporal)
     else:
         chosen = kb.search(kb.get_index(store_dir), question, limit=k)
     prompt = build_chat_prompt(question, chosen, recent_digests(digests_dir),

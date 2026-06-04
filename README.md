@@ -201,6 +201,7 @@ content_radar/
     gmail_imap.py      # fold AINews (& other newsletters) from your inbox via IMAP
   enrich.py            # fetch + attach linked-article text (detailed KB)
   chunk.py             # sentence-aware chunking, no overlap
+  temporal.py           # query analyzer: EXPLICIT/IMPLICIT/NONE temporal intent → date filters
   rag.py               # KB: contextual chunks + hybrid (e5 dense + BM25) + jina rerank → Qdrant
   kb.py                # local SQLite FTS fallback when Qdrant isn't configured
   digest.py            # thematic clustering + best-of-N pick; + full 繁中 newsletter translation
@@ -213,7 +214,7 @@ content_radar/
   cli.py               # collect / show / enrich / index / import / digest / synthesize / check-ainews / email-digest / eval
 scripts/
   ainews_trigger.gs    # Google Apps Script: punctual Gmail check → workflow_dispatch (GH cron is hours late)
-tests/                 # 76 tests (python -m pytest)
+tests/                 # 95 tests (python -m pytest)
 ```
 
 ### How it matches AINews
