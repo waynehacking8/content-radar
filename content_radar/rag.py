@@ -81,8 +81,13 @@ def ensure_datetime_index() -> None:
 
 
 def _build_query_filter(intent: TemporalIntent) -> "models.Filter | None":
-    """Translate a TemporalIntent into a Qdrant Filter (or None)."""
-    if intent.tier == TemporalTier.NONE or intent.date_from is None:
+    """Translate a TemporalIntent into a Qdrant Filter (or None).
+
+    Only EXPLICIT queries get a hard date filter. IMPLICIT ("latest", "最新")
+    queries skip filtering — "latest" means "prefer fresh", not "only recent".
+    Future: IMPLICIT will use Qdrant FormulaQuery with exp_decay scoring.
+    """
+    if intent.tier != TemporalTier.EXPLICIT or intent.date_from is None:
         return None
     from qdrant_client import models
     conditions = [models.FieldCondition(

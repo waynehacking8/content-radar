@@ -44,13 +44,11 @@ def test_build_query_filter_explicit_has_gte():
     assert "2026-06-04" in str(qf.must[0].range.gte)
 
 
-def test_build_query_filter_implicit_has_range():
+def test_build_query_filter_implicit_returns_none():
     start = dt.datetime(2026, 6, 1, 0, 0, tzinfo=dt.timezone.utc)
     end = dt.datetime(2026, 6, 4, 10, 0, tzinfo=dt.timezone.utc)
     intent = TemporalIntent(tier=TemporalTier.IMPLICIT, date_from=start, date_to=end)
-    qf = rag._build_query_filter(intent)
-    assert qf is not None
-    assert len(qf.must) == 2
+    assert rag._build_query_filter(intent) is None
 
 
 def test_ensure_datetime_index_noop_without_config(monkeypatch):
@@ -93,8 +91,8 @@ def test_explicit_temporal_does_not_fallback_to_unfiltered(monkeypatch):
     assert call_count["n"] == 1  # only the filtered call, no fallback
 
 
-def test_implicit_temporal_falls_back_when_few_results(monkeypatch):
-    """IMPLICIT queries ('latest') should fallback to unfiltered if too few results."""
+def test_implicit_temporal_does_unfiltered_search(monkeypatch):
+    """IMPLICIT queries ('latest') skip the date filter entirely — just normal search."""
     call_count = {"n": 0}
     monkeypatch.setenv("QDRANT_URL", "https://x.qdrant.io")
     monkeypatch.setenv("QDRANT_API_KEY", "k")
@@ -107,4 +105,4 @@ def test_implicit_temporal_falls_back_when_few_results(monkeypatch):
     result = rag.search("AI news", temporal_intent=implicit)
 
     assert len(result) > 0
-    assert call_count["n"] == 2  # filtered + fallback
+    assert call_count["n"] == 1  # single unfiltered call, no date filter
