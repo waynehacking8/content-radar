@@ -30,21 +30,21 @@ class TemporalIntent:
     date_to: _dt.datetime | None = None
 
 
-_EXPLICIT_PATTERNS: dict[str, int] = {
-    "today": 0,
-    "today's": 0,
-    "今天": 0,
-    "今日": 0,
-    "yesterday": 1,
-    "昨天": 1,
-    "昨日": 1,
-    "this week": 7,
-    "這週": 7,
-    "這禮拜": 7,
-    "本週": 7,
-    "this month": 30,
-    "本月": 30,
-    "這個月": 30,
+_EXPLICIT_PATTERNS: dict[str, tuple[int, int]] = {
+    "today": (0, 0),
+    "today's": (0, 0),
+    "今天": (0, 0),
+    "今日": (0, 0),
+    "yesterday": (1, 1),
+    "昨天": (1, 1),
+    "昨日": (1, 1),
+    "this week": (7, 0),
+    "這週": (7, 0),
+    "這禮拜": (7, 0),
+    "本週": (7, 0),
+    "this month": (30, 0),
+    "本月": (30, 0),
+    "這個月": (30, 0),
 }
 
 _IMPLICIT_KEYWORDS: set[str] = {
@@ -67,15 +67,21 @@ def detect_temporal_intent(
     now = now or _dt.datetime.now(_dt.timezone.utc)
     normed = _normalize(query)
 
-    for pattern, lookback_days in _EXPLICIT_PATTERNS.items():
+    for pattern, (start_offset, end_offset) in _EXPLICIT_PATTERNS.items():
         if pattern in normed:
-            start = (now - _dt.timedelta(days=lookback_days)).replace(
+            start = (now - _dt.timedelta(days=start_offset)).replace(
                 hour=0, minute=0, second=0, microsecond=0,
             )
+            if end_offset > 0:
+                end = (now - _dt.timedelta(days=end_offset)).replace(
+                    hour=23, minute=59, second=59, microsecond=999999,
+                )
+            else:
+                end = now
             return TemporalIntent(
                 tier=TemporalTier.EXPLICIT,
                 date_from=start,
-                date_to=now,
+                date_to=end,
             )
 
     if any(kw in normed for kw in _IMPLICIT_KEYWORDS):
