@@ -14,7 +14,8 @@ from . import config, kb, rag
 from .models import Item
 from .store import load_day
 from .synthesize import run_claude_cli
-from .temporal import detect_temporal_intent
+from .models import normalize_datetime
+from .temporal import TemporalIntent, TemporalTier, detect_temporal_intent
 
 _STOPWORDS = {
     "the", "and", "for", "what", "whats", "with", "this", "that", "how", "why",
@@ -36,6 +37,26 @@ def _recent_items(store_dir: Path, days: int, today: _dt.date) -> list[Item]:
     for delta in range(days):
         items.extend(load_day(store_dir, today - _dt.timedelta(days=delta)))
     return items
+
+
+def _filter_by_date(items: list[Item], intent: TemporalIntent) -> list[Item]:
+    """Post-filter items by temporal date range (for the kb.py path which has no date awareness)."""
+    if not intent.date_from:
+        return items
+    from_str = intent.date_from.strftime("%Y-%m-%d")
+    to_str = intent.date_to.strftime("%Y-%m-%d") if intent.date_to else None
+    filtered = []
+    for item in items:
+        if not item.created:
+            continue
+        normed = normalize_datetime(item.created)
+        item_date = normed[:10]
+        if item_date < from_str:
+            continue
+        if to_str and item_date > to_str:
+            continue
+        filtered.append(item)
+    return filtered
 
 
 _TERM_RE = re.compile(r"[a-z0-9]{2,}|[一-鿿㐀-䶿]{1,2}", re.UNICODE)
@@ -96,7 +117,8 @@ def recent_digests(digests_dir: Path, n: int = 2, *, raw_base: str | None = None
 
 def build_chat_prompt(question: str, items: list[Item], digest_text: str,
                       web_fallback: bool = False,
-                      today: _dt.date | None = None) -> str:
+                      today: _dt.date | None = None,
+                      temporal_intent: TemporalIntent | None = None) -> str:
     today = today or _dt.date.today()
     ctx = "\n\n".join(
         f"[{i.source} · {i.created or 'n/a'}] {i.title}\n{i.url}\n{i.text}"
@@ -119,6 +141,26 @@ def build_chat_prompt(question: str, items: list[Item], digest_text: str,
         if web_fallback else
         "If the context genuinely doesn't cover it, say so rather than guessing."
     )
+    temporal_rule = ""
+    if temporal_intent and temporal_intent.tier == TemporalTier.EXPLICIT:
+        date_label = temporal_intent.date_from.strftime("%Y-%m-%d") if temporal_intent.date_from else today.isoformat()
+        if not items:
+            temporal_rule = (
+                f"\n\nCRITICAL DATE CONSTRAINT: The user is asking about {date_label}. "
+                "The knowledge base has NO items for that date. You MUST tell the user "
+                "that no data is available for that date. Do NOT use the digest section "
+                "or your own knowledge to fabricate an answer — if the digest is from a "
+                "different date, ignore it entirely."
+            )
+        else:
+            temporal_rule = (
+                f"\n\nDATE CONSTRAINT: The user is asking specifically about {date_label}. "
+                "ONLY discuss items whose date tag matches that date. Discard any item or "
+                "digest content from other dates — do not blend them in."
+            )
+    digest_label = "RECENT DIGEST" if (
+        temporal_intent and temporal_intent.tier == TemporalTier.EXPLICIT
+    ) else "TODAY'S DIGEST (for recency framing)"
     return (
         f"Today is {today.isoformat()} (UTC). "
         "You are an AI-news assistant. Answer the user's question primarily from the "
@@ -134,9 +176,10 @@ def build_chat_prompt(question: str, items: list[Item], digest_text: str,
         "figure's type is unclear from the source, say so instead of guessing. "
         "ALWAYS reply in Traditional Chinese (繁體中文,台灣用語/詞彙),never Simplified "
         "Chinese, regardless of the language of the question or the sources. Keep "
-        "technical terms (model names, etc.) in their original form.\n\n"
+        "technical terms (model names, etc.) in their original form."
+        f"{temporal_rule}\n\n"
         f"=== RETRIEVED CONTEXT (most relevant first) ===\n{ctx}\n\n"
-        f"=== TODAY'S DIGEST (for recency framing) ===\n{digest_text[:2500]}\n\n"
+        f"=== {digest_label} ===\n{digest_text[:2500]}\n\n"
         f"=== QUESTION ===\n{question}"
     )
 
@@ -152,8 +195,11 @@ def answer(question: str, *, store_dir: Path | None = None, digests_dir: Path | 
         chosen = rag.search(question, limit=k, temporal_intent=temporal)
     else:
         chosen = kb.search(kb.get_index(store_dir), question, limit=k)
-    prompt = build_chat_prompt(question, chosen, recent_digests(digests_dir),
-                               web_fallback=web_fallback)
+        if temporal.tier == TemporalTier.EXPLICIT:
+            chosen = _filter_by_date(chosen, temporal)
+    digest_n = 1 if temporal.tier == TemporalTier.EXPLICIT else 2
+    prompt = build_chat_prompt(question, chosen, recent_digests(digests_dir, n=digest_n),
+                               web_fallback=web_fallback, temporal_intent=temporal)
     tools = _WEB_TOOLS if web_fallback else None
     timeout = _WEB_ANSWER_TIMEOUT_S if web_fallback else _ANSWER_TIMEOUT_S
     return run_claude_cli(prompt, model, timeout=timeout, allowed_tools=tools)

@@ -1,8 +1,9 @@
 import datetime as dt
 
 import content_radar.chat as chat_mod
-from content_radar.chat import _terms, build_chat_prompt, recent_digests, relevant_items
+from content_radar.chat import _filter_by_date, _terms, build_chat_prompt, recent_digests, relevant_items
 from content_radar.models import Item
+from content_radar.temporal import TemporalIntent, TemporalTier
 
 
 def test_recent_digests_prefers_live_http(monkeypatch, tmp_path):
@@ -136,5 +137,77 @@ def test_answer_passes_temporal_intent_to_rag(monkeypatch):
     chat_mod.answer("今天的AI新聞", web_fallback=False)
     intent = captured["temporal_intent"]
     assert intent is not None
-    from content_radar.temporal import TemporalTier
     assert intent.tier == TemporalTier.EXPLICIT
+
+
+def test_filter_by_date_keeps_matching_items():
+    today_item = _item("1", "Today news", text="fresh")
+    today_item = Item(**{**today_item.to_dict(), "created": "2026-06-06T10:00:00Z"})
+    old_item = _item("2", "Old news", text="stale")
+    old_item = Item(**{**old_item.to_dict(), "created": "2026-06-03T10:00:00Z"})
+
+    intent = TemporalIntent(
+        tier=TemporalTier.EXPLICIT,
+        date_from=dt.datetime(2026, 6, 6, 0, 0, tzinfo=dt.timezone.utc),
+        date_to=dt.datetime(2026, 6, 6, 23, 59, tzinfo=dt.timezone.utc),
+    )
+    filtered = _filter_by_date([today_item, old_item], intent)
+    assert len(filtered) == 1
+    assert filtered[0].title == "Today news"
+
+
+def test_filter_by_date_drops_items_without_created():
+    no_date = _item("1", "No date", text="missing")
+    intent = TemporalIntent(
+        tier=TemporalTier.EXPLICIT,
+        date_from=dt.datetime(2026, 6, 6, 0, 0, tzinfo=dt.timezone.utc),
+        date_to=dt.datetime(2026, 6, 6, 23, 59, tzinfo=dt.timezone.utc),
+    )
+    filtered = _filter_by_date([no_date], intent)
+    assert len(filtered) == 0
+
+
+def test_answer_kb_path_filters_by_date(monkeypatch):
+    captured = {}
+
+    old_item = Item(source="hn", id="1", title="Old", url="http://x/1",
+                    text="old stuff", score=99, created="2026-06-01T10:00:00Z")
+
+    def fake_run(prompt, model, timeout=300, allowed_tools=None):
+        captured["prompt"] = prompt
+        return "ok"
+
+    monkeypatch.setattr(chat_mod, "run_claude_cli", fake_run)
+    monkeypatch.setattr(chat_mod.rag, "configured", lambda: False)
+    monkeypatch.setattr(chat_mod.kb, "get_index", lambda _d: object())
+    monkeypatch.setattr(chat_mod.kb, "search", lambda _i, _q, limit=12: [old_item])
+    monkeypatch.setattr(chat_mod, "recent_digests", lambda _d, n=2: "")
+
+    chat_mod.answer("今天的AI新聞", web_fallback=False)
+    assert "Old" not in captured["prompt"]
+    assert "CRITICAL DATE CONSTRAINT" in captured["prompt"]
+
+
+def test_build_chat_prompt_explicit_temporal_no_items():
+    intent = TemporalIntent(
+        tier=TemporalTier.EXPLICIT,
+        date_from=dt.datetime(2026, 6, 6, 0, 0, tzinfo=dt.timezone.utc),
+    )
+    prompt = build_chat_prompt("今日AI新聞?", [], "old digest content",
+                               today=dt.date(2026, 6, 6), temporal_intent=intent)
+    assert "CRITICAL DATE CONSTRAINT" in prompt
+    assert "2026-06-06" in prompt
+    assert "RECENT DIGEST" in prompt
+    assert "TODAY'S DIGEST" not in prompt
+
+
+def test_build_chat_prompt_explicit_temporal_with_items():
+    intent = TemporalIntent(
+        tier=TemporalTier.EXPLICIT,
+        date_from=dt.datetime(2026, 6, 6, 0, 0, tzinfo=dt.timezone.utc),
+    )
+    items = [_item("1", "Fresh news", text="breaking")]
+    prompt = build_chat_prompt("今日AI新聞?", items, "digest",
+                               today=dt.date(2026, 6, 6), temporal_intent=intent)
+    assert "DATE CONSTRAINT" in prompt
+    assert "ONLY discuss items whose date tag matches" in prompt

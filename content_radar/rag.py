@@ -21,7 +21,7 @@ import os
 import uuid
 
 from .chunk import chunk_text
-from .models import Item
+from .models import Item, normalize_datetime
 from .temporal import TemporalIntent, TemporalTier
 
 _log = logging.getLogger(__name__)
@@ -112,7 +112,7 @@ def index_items(items: list[Item]) -> int:
             docs.append(f"{prefix}\n{ch}")  # contextualized text is what gets embedded
             metas.append({
                 "key": it.key, "source": it.source, "title": it.title, "url": it.url,
-                "score": it.score, "created": it.created, "chunk": ch, "chunk_idx": idx,
+                "score": it.score, "created": normalize_datetime(it.created), "chunk": ch, "chunk_idx": idx,
             })
             ids.append(point_id(f"{it.key}#{idx}"))
     if not docs:

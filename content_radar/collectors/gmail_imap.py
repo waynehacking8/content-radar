@@ -20,7 +20,7 @@ from email.header import decode_header, make_header
 from bs4 import BeautifulSoup
 
 from ..config import Interests
-from ..models import Item
+from ..models import Item, normalize_datetime
 from .base import warn
 
 SOURCE = "gmail"
@@ -166,7 +166,7 @@ def fetch(query: str, limit: int = MAX_EMAILS, max_chars: int = MAX_CHARS) -> li
                     text=f"{sender}: {body}",
                     score=0,
                     author=sender,
-                    created=msg.get("Date", ""),  # the email's date — history is dated
+                    created=normalize_datetime(msg.get("Date", "")),
                     extra={"newsletter": True},
                 ))
     except Exception as exc:  # noqa: BLE001 - never break the run

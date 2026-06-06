@@ -6,8 +6,27 @@ helpers return new objects.
 """
 from __future__ import annotations
 
+import email.utils
+import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
+
+_RFC2822_LIKE = re.compile(r"^[A-Za-z]{3},\s")
+
+
+def normalize_datetime(raw: str) -> str:
+    """Best-effort normalise a date(time) string to ISO-8601.
+
+    Handles RFC 2822 (email Date headers) and passes through ISO strings unchanged.
+    Returns the original string when parsing fails so no data is lost.
+    """
+    if not raw:
+        return raw
+    if _RFC2822_LIKE.match(raw):
+        parsed = email.utils.parsedate_to_datetime(raw)
+        return parsed.astimezone(timezone.utc).isoformat()
+    return raw
 
 
 @dataclass(frozen=True)
