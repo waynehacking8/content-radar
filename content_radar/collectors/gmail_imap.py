@@ -175,4 +175,4 @@ def fetch(query: str, limit: int = MAX_EMAILS, max_chars: int = MAX_CHARS) -> li
 
 
 def collect(interests: Interests) -> list[Item]:
-    return fetch(interests.gmail_query, MAX_EMAILS)
+    return fetch(interests.gmail_query, MAX_EMAILS, max_chars=FULL_CHARS)

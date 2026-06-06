@@ -39,6 +39,7 @@ class Item:
     score: int = 0       # points / upvotes / stars / likes
     author: str = ""
     created: str = ""     # ISO-8601 date or datetime string
+    first_seen: str = ""  # ISO date when our system first collected this item
     extra: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -47,7 +48,7 @@ class Item:
         return f"{self.source}:{self.id}"
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "source": self.source,
             "id": self.id,
             "title": self.title,
@@ -58,6 +59,9 @@ class Item:
             "created": self.created,
             "extra": dict(self.extra),
         }
+        if self.first_seen:
+            d["first_seen"] = self.first_seen
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> "Item":
@@ -70,5 +74,6 @@ class Item:
             score=int(data.get("score", 0)),
             author=data.get("author", ""),
             created=data.get("created", ""),
+            first_seen=data.get("first_seen", ""),
             extra=dict(data.get("extra", {})),
         )

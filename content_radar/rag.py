@@ -64,39 +64,39 @@ def _context_prefix(item: Item) -> str:
 
 
 def ensure_datetime_index() -> None:
-    """Create a payload index on `created` for efficient DatetimeRange filtering.
+    """Create payload indexes on `created` and `first_seen` for efficient filtering.
 
-    Idempotent — safe to call on every index run. Qdrant's filterable HNSW uses
-    this index to skip non-matching nodes during graph traversal instead of
-    brute-force scanning all payloads.
+    Idempotent — safe to call on every index run.
     """
     if not configured():
         return
     from qdrant_client import models
-    _client().create_payload_index(
-        collection_name=COLLECTION,
-        field_name="created",
-        field_schema=models.PayloadSchemaType.DATETIME,
-    )
+    client = _client()
+    for field in ("created", "first_seen"):
+        client.create_payload_index(
+            collection_name=COLLECTION,
+            field_name=field,
+            field_schema=models.PayloadSchemaType.DATETIME,
+        )
 
 
 def _build_query_filter(intent: TemporalIntent) -> "models.Filter | None":
     """Translate a TemporalIntent into a Qdrant Filter (or None).
 
-    Only EXPLICIT queries get a hard date filter. IMPLICIT ("latest", "最新")
-    queries skip filtering — "latest" means "prefer fresh", not "only recent".
-    Future: IMPLICIT will use Qdrant FormulaQuery with exp_decay scoring.
+    EXPLICIT queries filter on `first_seen` — the date our system first collected
+    the item. This prevents multi-day trending stories from polluting "today's
+    news". IMPLICIT queries skip filtering.
     """
     if intent.tier != TemporalTier.EXPLICIT or intent.date_from is None:
         return None
     from qdrant_client import models
     conditions = [models.FieldCondition(
-        key="created",
+        key="first_seen",
         range=models.DatetimeRange(gte=intent.date_from.isoformat()),
     )]
     if intent.date_to is not None:
         conditions.append(models.FieldCondition(
-            key="created",
+            key="first_seen",
             range=models.DatetimeRange(lte=intent.date_to.isoformat()),
         ))
     return models.Filter(must=conditions)
@@ -112,7 +112,10 @@ def index_items(items: list[Item]) -> int:
             docs.append(f"{prefix}\n{ch}")  # contextualized text is what gets embedded
             metas.append({
                 "key": it.key, "source": it.source, "title": it.title, "url": it.url,
-                "score": it.score, "created": normalize_datetime(it.created), "chunk": ch, "chunk_idx": idx,
+                "score": it.score,
+                "created": normalize_datetime(it.created),
+                "first_seen": it.first_seen or normalize_datetime(it.created),
+                "chunk": ch, "chunk_idx": idx,
             })
             ids.append(point_id(f"{it.key}#{idx}"))
     if not docs:
@@ -195,6 +198,7 @@ def search(
             text=m.get("chunk", ""),
             score=int(m.get("score") or 0),
             created=m.get("created", ""),
+            first_seen=m.get("first_seen", ""),
         ))
         if len(out) >= limit:
             break

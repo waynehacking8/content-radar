@@ -99,7 +99,8 @@ def _result_text(stdout: str) -> str:
 
 
 def run_claude_cli(prompt: str, model: str, timeout: int = 300,
-                   allowed_tools: list[str] | None = None) -> str:
+                   allowed_tools: list[str] | None = None,
+                   mcp_config: str | None = None) -> str:
     """Run a one-shot Claude Code query using the local subscription auth.
 
     Uses `claude -p` (headless). No API key required: auth comes from the
@@ -110,11 +111,16 @@ def run_claude_cli(prompt: str, model: str, timeout: int = 300,
     fill knowledge-base gaps from the live web. It defaults to NONE: we always
     pass --allowedTools (empty = no tools) so a pure-generation call can never
     wander off into Task/Read/Bash and touch local files or break the output.
+
+    mcp_config points to a JSON file describing MCP tool servers. The claude
+    CLI launches each server as a subprocess and exposes their tools.
     """
     cmd = ["claude", "-p", "--output-format", "json"]
     if model:
         cmd += ["--model", model]
-    cmd += ["--allowedTools", ",".join(allowed_tools or [])]  # empty = no tools
+    if mcp_config:
+        cmd += ["--mcp-config", mcp_config]
+    cmd += ["--allowedTools", ",".join(allowed_tools or [])]
     proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=timeout)
     if proc.returncode != 0:
         detail = (proc.stderr.strip() or proc.stdout.strip() or "no output")[:600]
