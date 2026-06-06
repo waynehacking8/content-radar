@@ -70,7 +70,7 @@ def _resolve_substack_url(href: str) -> str | None:
             pass
     if "substack.com/redirect/" in href:
         try:
-            resp = _requests.head(href, allow_redirects=True, timeout=8)
+            resp = _requests.head(href, allow_redirects=True, timeout=3)
             url = resp.url.split("?")[0]
             if "substack.com" not in url:
                 return url
