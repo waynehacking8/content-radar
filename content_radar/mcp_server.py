@@ -40,6 +40,10 @@ def _search_news(
     items = rag.search(query, limit=limit, prefetch=60, per_parent=8,
                        temporal_intent=intent)
 
+    if first_seen_from and intent:
+        from .chat import _dedup_by_story
+        items = _dedup_by_story(items, first_seen_from)
+
     if source:
         items = [i for i in items if i.source == source]
 

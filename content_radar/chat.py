@@ -27,6 +27,49 @@ _MCP_CONFIG = str(Path(__file__).resolve().parent.parent / "mcp_config.json")
 _ANSWER_TIMEOUT_S = 300
 _TOOL_ANSWER_TIMEOUT_S = 420
 
+_URL_RE = re.compile(r'https?://[^\s\)>]+')
+_URL_SKIP = {'substack.com', 'email-', 'smol.ai', 'latent.space/action'}
+_URL_SEEN_PATH = Path(__file__).resolve().parent.parent / "store" / "url_seen.json"
+_url_seen_cache: dict[str, str] | None = None
+
+
+def _load_url_seen() -> dict[str, str]:
+    """Load URL→earliest_first_seen registry (cached in-process)."""
+    global _url_seen_cache
+    if _url_seen_cache is None:
+        try:
+            import json as _json
+            _url_seen_cache = _json.loads(_URL_SEEN_PATH.read_text(encoding="utf-8"))
+        except (FileNotFoundError, ValueError):
+            _url_seen_cache = {}
+    return _url_seen_cache
+
+
+def _extract_urls(text: str) -> set[str]:
+    return {
+        u.split("?")[0].rstrip("/")
+        for u in _URL_RE.findall(text)
+        if not any(s in u for s in _URL_SKIP)
+    }
+
+
+def _dedup_by_story(items: list[Item], target_date: str) -> list[Item]:
+    """Remove chunks whose story URLs all appeared before target_date."""
+    url_seen = _load_url_seen()
+    if not url_seen:
+        return items
+    result = []
+    for item in items:
+        urls = _extract_urls(item.text)
+        if not urls:
+            result.append(item)
+            continue
+        has_new = any(url_seen.get(u, target_date) >= target_date for u in urls)
+        if has_new:
+            result.append(item)
+    return result
+
+
 _STOPWORDS = {
     "the", "and", "for", "what", "whats", "with", "this", "that", "how", "why",
     "are", "was", "were", "has", "have", "about", "tell", "show", "give", "any",
@@ -135,7 +178,7 @@ def build_chat_prompt(question: str, items: list[Item], digest_text: str,
 
 def _answer_enhanced(question: str, model: str, web_fallback: bool,
                      store_dir: Path, digests_dir: Path, k: int) -> str:
-    """Enhanced single-shot RAG with temporal filtering + reranking."""
+    """Enhanced single-shot RAG with temporal filtering + reranking + story dedup."""
     temporal = detect_temporal_intent(question)
 
     if rag.configured():
@@ -146,6 +189,10 @@ def _answer_enhanced(question: str, model: str, web_fallback: bool,
         chosen = kb.search(kb.get_index(store_dir), question, limit=k)
         if temporal.tier == TemporalTier.EXPLICIT:
             chosen = _filter_by_date(chosen, temporal)
+
+    if temporal.tier == TemporalTier.EXPLICIT and temporal.date_from:
+        target = temporal.date_from.strftime("%Y-%m-%d")
+        chosen = _dedup_by_story(chosen, target)
 
     digest_text = "" if temporal.tier == TemporalTier.EXPLICIT else recent_digests(digests_dir)
 
