@@ -9,8 +9,8 @@ of Anthropic's Contextual Retrieval.
 """
 from __future__ import annotations
 
-CHUNK_SIZE = 1800      # ~450 tokens (2026 sweet spot ~400-512)
-CHUNK_OVERLAP = 0      # overlap shown to add cost without benefit (2026)
+CHUNK_SIZE = 1200      # ~300 tokens — fits e5-large's 512-token window with contextual prefix
+CHUNK_OVERLAP = 150    # ~10-15% overlap to preserve context across boundaries
 
 
 def chunk_text(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
