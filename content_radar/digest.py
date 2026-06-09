@@ -150,25 +150,94 @@ def write_digest(markdown: str, out_dir, day: _dt.date) -> Path:
 
 
 ZH_TRANSLATE_INSTRUCTIONS = """\
-你是專業科技新聞譯者。把下面這封 AINews 英文電子報**完整忠實**翻成
+你是專業科技新聞譯者。把下面這**一段** AINews 英文電子報**完整忠實**翻成
 **繁體中文(台灣用語)**,讀者是工程師。鐵則:
-- 逐段翻譯,**不可省略、不可摘要、不可濃縮** —— 保留原文每一個章節
-  (如 AI Twitter Recap 的各子主題、AI Reddit Recap、研究論文、Top tweets)
-  與其中每一條目;原文多長,譯文就多長。
+- 逐段翻譯,**不可省略、不可摘要、不可濃縮** —— 保留這段的每一個章節與條目;
+  原文多長,譯文就多長。
 - 模型名稱、公司名、帳號(@handle)、技術術語(RAG、MoE、Flash Attention 等)、
   數字、與所有連結 **原樣保留**,不要翻譯也不要刪除。
 - 用 Markdown 呈現:章節標題用 ## / ###,條目分段清楚易讀。
-- 若原文開頭有一句話 TLDR,保留並翻譯它放在最前面。
+- 這只是整封信的一個片段,直接從這段開頭翻起,**不要**自行補開場白或結語。
 只輸出翻譯後的 Markdown,前後不要加任何說明或註解。"""
+
+# A single giant `claude -p` call on a 30k+ char newsletter is fragile: long
+# streaming generations hit socket drops (local) and timeouts (CI) — both
+# observed 2026-06-09. Translate in section-aware chunks instead: each call is
+# short and fast, and a transient failure only costs one chunk (retried).
+TRANSLATE_CHUNK_CHARS = 6000
+TRANSLATE_RETRIES = 3
+
+
+def _hard_split(block: str, max_chars: int) -> list[str]:
+    """Break a single oversized block (no blank lines) into <=max_chars pieces,
+    preferring line boundaries, falling back to a raw char window for a single
+    very long line."""
+    if len(block) <= max_chars:
+        return [block]
+    pieces: list[str] = []
+    cur = ""
+    for line in block.split("\n"):
+        while len(line) > max_chars:  # a single line longer than the budget
+            if cur:
+                pieces.append(cur); cur = ""
+            pieces.append(line[:max_chars]); line = line[max_chars:]
+        if cur and len(cur) + len(line) + 1 > max_chars:
+            pieces.append(cur); cur = line
+        else:
+            cur = f"{cur}\n{line}" if cur else line
+    if cur:
+        pieces.append(cur)
+    return pieces
+
+
+def _split_for_translation(text: str, max_chars: int = TRANSLATE_CHUNK_CHARS) -> list[str]:
+    """Split a newsletter into <=max_chars chunks, breaking on blank lines /
+    markdown headings so a section is never cut mid-sentence. A single block
+    that is itself larger than max_chars is hard-split further so no chunk ever
+    exceeds the budget (a giant chunk would defeat the point — see _hard_split)."""
+    blocks = re.split(r"\n\s*\n", text)
+    chunks: list[str] = []
+    cur = ""
+    for block in blocks:
+        block = block.strip("\n")
+        if not block:
+            continue
+        for piece in _hard_split(block, max_chars):
+            if cur and len(cur) + len(piece) + 2 > max_chars:
+                chunks.append(cur)
+                cur = piece
+            else:
+                cur = f"{cur}\n\n{piece}" if cur else piece
+    if cur:
+        chunks.append(cur)
+    return chunks or [text]
+
+
+def _translate_chunk(chunk: str, model: str, timeout: int) -> str:
+    prompt = f"{ZH_TRANSLATE_INSTRUCTIONS}\n\n=== AINEWS 原文片段 ===\n{chunk}"
+    last_exc: Exception | None = None
+    for attempt in range(1, TRANSLATE_RETRIES + 1):
+        try:
+            return run_claude_cli(prompt, model, timeout=timeout).strip()
+        except Exception as exc:  # noqa: BLE001 — retry transient CLI/socket errors
+            last_exc = exc
+            print(f"  translate chunk attempt {attempt}/{TRANSLATE_RETRIES} failed: "
+                  f"{str(exc)[:160]}")
+    raise RuntimeError(f"chunk translation failed after {TRANSLATE_RETRIES} attempts: {last_exc}")
 
 
 def chinese_newsletter_markdown(english_text: str, model: str, timeout: int = 1800) -> str:
     """Faithfully translate a full AINews newsletter into Traditional Chinese.
 
-    Unlike a digest, this preserves every section and item — the output length
-    tracks the source. A long newsletter (30k+ chars) can take >10 min, so the
-    timeout is 30 min — the old 600s cap killed the translation of a 32k-char
-    issue on 2026-06-09.
+    Translated in section-aware chunks (see TRANSLATE_CHUNK_CHARS), each with a
+    bounded retry, so one dropped connection no longer loses the whole issue.
+    `timeout` is the per-chunk subprocess cap.
     """
-    prompt = f"{ZH_TRANSLATE_INSTRUCTIONS}\n\n=== AINEWS 原文 ===\n{english_text}"
-    return run_claude_cli(prompt, model, timeout=timeout).strip()
+    chunks = _split_for_translation(english_text)
+    print(f"  translating in {len(chunks)} chunk(s) "
+          f"(~{TRANSLATE_CHUNK_CHARS} chars each) ...")
+    out: list[str] = []
+    for i, chunk in enumerate(chunks, 1):
+        out.append(_translate_chunk(chunk, model, timeout))
+        print(f"  chunk {i}/{len(chunks)} done")
+    return "\n\n".join(out).strip()
