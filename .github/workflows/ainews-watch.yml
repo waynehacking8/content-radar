@@ -43,7 +43,9 @@ concurrency:
 jobs:
   watch:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Translation alone can take up to 30 min (chinese_newsletter_markdown);
+    # leave headroom for install + index on top.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 

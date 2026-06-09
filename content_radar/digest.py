@@ -162,11 +162,13 @@ ZH_TRANSLATE_INSTRUCTIONS = """\
 只輸出翻譯後的 Markdown,前後不要加任何說明或註解。"""
 
 
-def chinese_newsletter_markdown(english_text: str, model: str, timeout: int = 600) -> str:
+def chinese_newsletter_markdown(english_text: str, model: str, timeout: int = 1800) -> str:
     """Faithfully translate a full AINews newsletter into Traditional Chinese.
 
     Unlike a digest, this preserves every section and item — the output length
-    tracks the source. Long output, so it gets a generous timeout.
+    tracks the source. A long newsletter (30k+ chars) can take >10 min, so the
+    timeout is 30 min — the old 600s cap killed the translation of a 32k-char
+    issue on 2026-06-09.
     """
     prompt = f"{ZH_TRANSLATE_INSTRUCTIONS}\n\n=== AINEWS 原文 ===\n{english_text}"
     return run_claude_cli(prompt, model, timeout=timeout).strip()
