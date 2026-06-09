@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import os
+import sys
 
 from . import config
 from .collectors import REGISTRY, collect_all
@@ -117,8 +118,16 @@ def cmd_check_ainews(args) -> None:
     """
     config.load_env()
     from . import watch
+    from .collectors.gmail_imap import GmailAuthError
 
-    n = watch.pending_count(args.query or None)
+    try:
+        n = watch.pending_count(args.query or None)
+    except GmailAuthError as exc:
+        # Fail the CI step (red ❌) rather than reporting found=false — an auth
+        # outage must not look identical to "no new mail" and silently skip the
+        # forward, as it did 2026-06-09.
+        print(f"::error::Gmail auth failed in check-ainews: {exc}", file=sys.stderr)
+        sys.exit(1)
     found = "true" if n > 0 else "false"
     print(f"{n} fresh unforwarded newsletter(s) -> found={found}")
     gh_output = os.environ.get("GITHUB_OUTPUT")

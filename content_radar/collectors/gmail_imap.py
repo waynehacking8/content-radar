@@ -164,6 +164,15 @@ def _body_text(msg) -> str:
 # IMAP session
 # ---------------------------------------------------------------------------
 
+class GmailAuthError(RuntimeError):
+    """Gmail IMAP login was rejected (bad/expired app password, wrong user).
+
+    Distinct from "no new mail" so callers can fail loudly instead of silently
+    reporting an empty result — an auth outage that returns 0 looks identical to
+    a genuinely empty inbox and hides a broken pipeline for days.
+    """
+
+
 @contextlib.contextmanager
 def _session(readonly: bool = False):
     user, password = _creds()
@@ -172,7 +181,14 @@ def _session(readonly: bool = False):
         return
     conn = imaplib.IMAP4_SSL(IMAP_HOST)
     try:
-        conn.login(user, password)
+        try:
+            conn.login(user, password)
+        except imaplib.IMAP4.error as exc:
+            raise GmailAuthError(
+                f"Gmail login rejected for {user!r}: {exc}. The GMAIL_APP_PASSWORD "
+                "is likely expired/revoked — regenerate at "
+                "https://myaccount.google.com/apppasswords and update the secret."
+            ) from exc
         conn.select("INBOX", readonly=readonly)
         yield conn
     finally:
@@ -191,6 +207,8 @@ def search_count(query: str) -> int:
     try:
         with _session(readonly=True) as conn:
             return len(_gmail_search(conn, query)) if conn is not None else 0
+    except GmailAuthError:
+        raise  # auth failure is not "0 results" — let the caller fail loudly
     except Exception as exc:  # noqa: BLE001
         warn(SOURCE, exc)
         return 0
