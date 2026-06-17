@@ -80,9 +80,20 @@ def _md_to_html(markdown: str) -> str:
     )
 
 
+def _clean_header(value: str) -> str:
+    """Collapse CR/LF and surrounding whitespace into single spaces.
+
+    Email headers may not contain linefeed or carriage-return characters
+    (Python's email policy raises ValueError). AINews subjects sometimes wrap
+    across lines (e.g. "... IndexShare for\\n Speculative Decoding"), so flatten
+    any embedded whitespace runs before using the value as a header.
+    """
+    return re.sub(r"\s+", " ", value).strip()
+
+
 def build_message(subject: str, markdown: str, to_addr: str, from_addr: str) -> EmailMessage:
     msg = EmailMessage()
-    msg["Subject"] = subject
+    msg["Subject"] = _clean_header(subject)
     msg["From"] = from_addr
     msg["To"] = to_addr
     msg.set_content(markdown)  # plain-text fallback
