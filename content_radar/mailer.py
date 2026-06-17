@@ -94,8 +94,8 @@ def _clean_header(value: str) -> str:
 def build_message(subject: str, markdown: str, to_addr: str, from_addr: str) -> EmailMessage:
     msg = EmailMessage()
     msg["Subject"] = _clean_header(subject)
-    msg["From"] = from_addr
-    msg["To"] = to_addr
+    msg["From"] = _clean_header(from_addr)
+    msg["To"] = _clean_header(to_addr)
     msg.set_content(markdown)  # plain-text fallback
     msg.add_alternative(_md_to_html(markdown), subtype="html")
     return msg
