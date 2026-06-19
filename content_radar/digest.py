@@ -241,3 +241,24 @@ def chinese_newsletter_markdown(english_text: str, model: str, timeout: int = 18
         out.append(_translate_chunk(chunk, model, timeout))
         print(f"  chunk {i}/{len(chunks)} done")
     return "\n\n".join(out).strip()
+
+
+EMAIL_SUMMARY_INSTRUCTIONS = """\
+你是科技電子報的編輯。下面是今天整封 AINews 電子報的英文全文。
+用**繁體中文（台灣用語）**寫一段「本期摘要」，讓讀者 30 秒內掌握整封信重點：
+先用一句話總結今天最重要的事，接著 3–6 個條列（每條一句），點出最值得注意的
+主題、工具或事件。只輸出摘要本身的 Markdown，不要前言、不要大標題、不要結語。"""
+
+
+def summarize_for_email(english_text: str, model: str, timeout: int = 600) -> str:
+    """A Traditional-Chinese TL;DR of the whole newsletter, to prepend to the email
+    so the reader gets the gist before the full translation. Best-effort: returns ''
+    on any failure so it never blocks delivery. Summarises the lede + top sections
+    (where AINews puts the most important items), capped for speed."""
+    prompt = f"{EMAIL_SUMMARY_INSTRUCTIONS}\n\n=== AINEWS 全文 ===\n{english_text[:12000]}"
+    try:
+        body = run_claude_cli(prompt, model, timeout=timeout).strip()
+    except Exception as exc:  # noqa: BLE001
+        print(f"  summary generation failed ({str(exc)[:120]}) — sending without it")
+        return ""
+    return f"## 📌 本期摘要\n\n{body}" if body else ""

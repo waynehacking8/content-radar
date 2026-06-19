@@ -139,7 +139,7 @@ def cmd_check_ainews(args) -> None:
 def cmd_email_digest(args) -> None:
     config.load_env()
     from . import mailer
-    from .digest import chinese_newsletter_markdown
+    from .digest import chinese_newsletter_markdown, summarize_for_email
 
     if not mailer.configured():
         raise SystemExit("set GMAIL_USER + GMAIL_APP_PASSWORD to send the digest email.")
@@ -167,6 +167,10 @@ def cmd_email_digest(args) -> None:
     print(f"translating '{src.title}' ({len(body)} chars) to Traditional Chinese "
           f"via {config.synth_model()} ...")
     zh = chinese_newsletter_markdown(body, config.synth_model())
+    # Prepend a whole-email TL;DR so the reader gets the gist before the full text.
+    summary = summarize_for_email(body, config.synth_model())
+    if summary:
+        zh = f"{summary}\n\n---\n\n{zh}"
     subject = config.forwarded_subject(src.title)
     to = mailer.send_markdown_email(subject, zh, to_addr=args.to or None)
     print(f"sent '{subject}' ({len(zh)} chars) -> {to}")
