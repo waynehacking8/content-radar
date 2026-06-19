@@ -12,7 +12,7 @@ collectors ──▶ dated JSON store (dedup) ──▶ │
         │                                   │
         └──▶ enrich (full text) ──▶ Qdrant  ├──▶ Telegram chat bot (繁中, RAG + WebSearch)
              vector KB (e5 + BM25 + rerank) │
-                                            └──▶ AINews → 繁中 email (forwarded on arrival)
+                                            └──▶ AINews → 繁中 email + 本期摘要 (forwarded on arrival)
 ```
 
 Two model layers: **retrieval runs locally for free** (fastembed: e5-large dense +
@@ -135,7 +135,8 @@ subscription**, not an API key:
   index → digest → drafts, committed back to the repo for review.
 - **`.github/workflows/ainews-watch.yml`** — AINews lands at an unpredictable
   time (11:00–16:00 Taipei). The moment a fresh issue shows up, this translates
-  it to 繁中, emails it, and indexes it into the KB. Dedup lives in Gmail (a
+  it to 繁中, prepends a one-glance **本期摘要** (whole-email TL;DR — a one-line lede
+  plus 3–6 bullets), emails it, and indexes it into the KB. Dedup lives in Gmail (a
   `radar-forwarded` label on processed mail), so runs are idempotent — empty
   checks finish in ~30s without installing the heavy stack.
 
@@ -204,7 +205,7 @@ content_radar/
   temporal.py           # query analyzer: EXPLICIT/IMPLICIT/NONE temporal intent → date filters
   rag.py               # KB: contextual chunks + hybrid (e5 dense + BM25) + jina rerank → Qdrant
   kb.py                # local SQLite FTS fallback when Qdrant isn't configured
-  digest.py            # thematic clustering + best-of-N pick; + full 繁中 newsletter translation
+  digest.py            # thematic clustering + best-of-N pick; full 繁中 translation + 本期摘要 TL;DR
   synthesize.py        # claude CLI backend (subscription; tools off by default)
   chat.py              # RAG chat: retrieve → answer in 繁中, WebSearch fallback on KB gaps
   telegram_bot.py      # long-poll Telegram bot over chat.py (serverless, no own host)
