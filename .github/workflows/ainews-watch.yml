@@ -47,9 +47,9 @@ jobs:
     # leave headroom for install + index on top.
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -65,7 +65,7 @@ jobs:
 
       # ── Everything below only runs when a new issue is waiting ──────────────
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: steps.check.outputs.found == 'true'
         with:
           node-version: "20"
@@ -78,7 +78,7 @@ jobs:
 
       - name: Cache fastembed model
         if: steps.check.outputs.found == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/fastembed
           key: fastembed-e5-large-jina-v2
