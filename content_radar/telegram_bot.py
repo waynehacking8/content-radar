@@ -69,28 +69,6 @@ def _token() -> str:
     return token
 
 
-def poll_once() -> int:
-    """Drain and answer all pending messages, then exit. Stateless: Telegram
-    holds unconfirmed updates for ~24h, so a cron can call this on a schedule
-    without persisting an offset. Returns how many updates were handled.
-    """
-    token = _token()
-    updates = _call(token, "getUpdates", poll=0).get("result", [])
-    last = None
-    for update in updates:
-        last = update["update_id"]
-        message = update.get("message") or update.get("edited_message")
-        if message:
-            try:
-                _handle(token, message)
-            except Exception as exc:  # noqa: BLE001
-                print("handle error:", exc)
-    if last is not None:
-        _call(token, "getUpdates", offset=last + 1)  # acknowledge the batch
-    print(f"handled {len(updates)} update(s)")
-    return len(updates)
-
-
 def run() -> None:
     """Continuous long-polling loop (for an always-on host)."""
     token = _token()
@@ -114,9 +92,4 @@ def run() -> None:
 
 
 if __name__ == "__main__":
-    import sys
-
-    if "--once" in sys.argv:
-        poll_once()
-    else:
-        run()
+    run()

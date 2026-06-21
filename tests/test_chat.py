@@ -1,7 +1,7 @@
 import datetime as dt
 
 import content_radar.chat as chat_mod
-from content_radar.chat import _filter_by_date, _terms, build_chat_prompt, recent_digests, relevant_items
+from content_radar.chat import _filter_by_date, build_chat_prompt, recent_digests
 from content_radar.models import Item
 from content_radar.temporal import TemporalIntent, TemporalTier
 
@@ -34,22 +34,6 @@ def test_recent_digests_uses_disk_when_raw_base_disabled(tmp_path):
 def _item(id_, title, score=10, text=""):
     return Item(source="hackernews", id=id_, title=title, url=f"http://x/{id_}",
                 text=text, score=score)
-
-
-def test_relevant_items_ranks_by_keyword_overlap():
-    nvidia = _item("1", "NVIDIA releases open GPU kernels", score=5)
-    rag = _item("2", "A guide to RAG pipelines", score=99)
-    items = [rag, nvidia]
-    # despite lower score, the NVIDIA item must win for an NVIDIA question
-    top = relevant_items(items, "what is new with nvidia gpu?", k=1)
-    assert top == [nvidia]
-
-
-def test_relevant_items_falls_back_to_score_when_no_terms_match():
-    a = _item("1", "Cats", score=5)
-    b = _item("2", "Dogs", score=50)
-    top = relevant_items([a, b], "the and for", k=1)  # only stopwords
-    assert top == [b]
 
 
 def test_build_chat_prompt_includes_question_and_sources():
@@ -106,19 +90,6 @@ def test_answer_passes_websearch_tool_only_when_web_fallback(monkeypatch):
     chat_mod.answer("q", web_fallback=False)
     assert captured["allowed_tools"] is None
     assert captured["timeout"] == 300
-
-
-def test_terms_captures_chinese_and_latin():
-    terms = _terms("今天的AI新聞")
-    assert "ai" in terms
-    assert "新聞" in terms or "今天" in terms
-
-
-def test_terms_filters_stopwords():
-    terms = _terms("what is the latest news today")
-    assert "latest" not in terms
-    assert "today" not in terms
-    assert "news" not in terms
 
 
 def test_answer_passes_temporal_intent_to_rag(monkeypatch):
