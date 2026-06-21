@@ -64,7 +64,7 @@ def test_build_chat_prompt_web_fallback_invites_web_search_with_attribution():
     # prefers KB but allows the tool, and demands sourced facts (no invention)
     assert "WebSearch" in prompt
     assert "Prefer the retrieved context" in prompt
-    assert "never state a fact you cannot source" in prompt
+    assert "Every claim must come from context or a web result you opened" in prompt
 
 
 def test_answer_passes_websearch_tool_only_when_web_fallback(monkeypatch):
@@ -156,7 +156,9 @@ def test_answer_kb_path_filters_by_date(monkeypatch):
 
     chat_mod.answer("今天的AI新聞", web_fallback=False)
     assert "Old" not in captured["prompt"]
-    assert "CRITICAL DATE CONSTRAINT" in captured["prompt"]
+    # the stale item is date-filtered out, so the prompt hits the no-items branch
+    assert "CRITICAL:" in captured["prompt"]
+    assert "No items were found" in captured["prompt"]
 
 
 def test_build_chat_prompt_explicit_temporal_no_items():
@@ -166,10 +168,10 @@ def test_build_chat_prompt_explicit_temporal_no_items():
     )
     prompt = build_chat_prompt("今日AI新聞?", [], "old digest content",
                                today=dt.date(2026, 6, 6), temporal_intent=intent)
-    assert "CRITICAL DATE CONSTRAINT" in prompt
+    assert "CRITICAL:" in prompt
     assert "2026-06-06" in prompt
-    assert "RECENT DIGEST" in prompt
-    assert "TODAY'S DIGEST" not in prompt
+    # digest is suppressed for EXPLICIT temporal queries (stale-story pollution)
+    assert "old digest content" not in prompt
 
 
 def test_build_chat_prompt_explicit_temporal_with_items():
@@ -180,5 +182,5 @@ def test_build_chat_prompt_explicit_temporal_with_items():
     items = [_item("1", "Fresh news", text="breaking")]
     prompt = build_chat_prompt("今日AI新聞?", items, "digest",
                                today=dt.date(2026, 6, 6), temporal_intent=intent)
-    assert "DATE CONSTRAINT" in prompt
-    assert "ONLY discuss items whose date tag matches" in prompt
+    assert "DATE:" in prompt
+    assert "Only discuss items with first_seen matching that date" in prompt

@@ -11,7 +11,7 @@ import re
 import sqlite3
 from pathlib import Path
 
-from .models import Item
+from .models import Item, dedup_by_key
 
 _SCHEMA = """
 CREATE VIRTUAL TABLE items USING fts5(
@@ -28,17 +28,13 @@ _CACHE: dict[str, tuple[int, sqlite3.Connection]] = {}
 def load_corpus(store_dir: str | Path) -> list[Item]:
     """All items across every committed day, deduped by key (newest score wins)."""
     raw = Path(store_dir) / "raw"
-    by_key: dict[str, Item] = {}
+    items: list[Item] = []
     for f in sorted(raw.glob("*.json")):
         try:
-            for d in json.loads(f.read_text(encoding="utf-8")):
-                item = Item.from_dict(d)
-                cur = by_key.get(item.key)
-                if cur is None or item.score >= cur.score:
-                    by_key[item.key] = item
+            items.extend(Item.from_dict(d) for d in json.loads(f.read_text(encoding="utf-8")))
         except (json.JSONDecodeError, OSError):
             continue
-    return list(by_key.values())
+    return dedup_by_key(items)
 
 
 def build_index(items: list[Item], db_path: str = ":memory:") -> sqlite3.Connection:

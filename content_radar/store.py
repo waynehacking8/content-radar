@@ -16,7 +16,7 @@ from datetime import date
 from pathlib import Path
 from typing import Iterable
 
-from .models import Item
+from .models import Item, dedup_by_key
 
 
 def _day_path(store_dir: Path, day: date) -> Path:
@@ -53,12 +53,8 @@ def load_day(store_dir: Path, day: date) -> tuple[Item, ...]:
 
 def merge(existing: Iterable[Item], incoming: Iterable[Item]) -> tuple[Item, ...]:
     """Dedup by key; on collision keep the higher-scored item."""
-    by_key: dict[str, Item] = {}
-    for item in list(existing) + list(incoming):
-        current = by_key.get(item.key)
-        if current is None or item.score >= current.score:
-            by_key[item.key] = item
-    return tuple(sorted(by_key.values(), key=lambda i: i.score, reverse=True))
+    deduped = dedup_by_key([*existing, *incoming])
+    return tuple(sorted(deduped, key=lambda i: i.score, reverse=True))
 
 
 def stamp_first_seen(items: Iterable[Item], store_dir: Path, day: date) -> list[Item]:
