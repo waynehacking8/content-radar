@@ -69,36 +69,45 @@ def _token() -> str:
     return token
 
 
-def poll_once() -> int:
-    """Drain and answer all pending messages, then exit. Stateless: Telegram
-    holds unconfirmed updates for ~24h, so a cron can call this on a schedule
-    without persisting an offset. Returns how many updates were handled.
-    """
-    token = _token()
-    updates = _call(token, "getUpdates", poll=0).get("result", [])
-    last = None
-    for update in updates:
-        last = update["update_id"]
-        message = update.get("message") or update.get("edited_message")
-        if message:
-            try:
-                _handle(token, message)
-            except Exception as exc:  # noqa: BLE001
-                print("handle error:", exc)
-    if last is not None:
-        _call(token, "getUpdates", offset=last + 1)  # acknowledge the batch
-    print(f"handled {len(updates)} update(s)")
-    return len(updates)
+def _kick_ghost(token: str) -> None:
+    """Disconnect a ghost polling instance by briefly setting then deleting a
+    webhook — Telegram drops the other long-poll, clearing 409 conflicts."""
+    try:
+        requests.post(API.format(token=token, method="setWebhook"),
+                      data={"url": "https://example.com:443/x"}, timeout=10)
+        time.sleep(2)
+        requests.post(API.format(token=token, method="deleteWebhook"), timeout=10)
+        time.sleep(0.5)
+    except requests.RequestException:
+        pass
 
 
 def run() -> None:
-    """Continuous long-polling loop (for an always-on host)."""
+    """Continuous long-polling loop (for an always-on host).
+
+    Kicks any ghost instance on start and on 409 (Conflict: another getUpdates is
+    already running) so a stale process can't permanently block this one.
+    """
     token = _token()
     print("radar telegram bot polling... (Ctrl-C to stop)")
+    _kick_ghost(token)
     offset = None
+    conflicts = 0
     while True:
         try:
             resp = _call(token, "getUpdates", poll=60, offset=offset)
+            conflicts = 0
+        except requests.exceptions.HTTPError as exc:
+            if "409" in str(exc):
+                conflicts += 1
+                print(f"409 conflict (#{conflicts}), kicking ghost...")
+                _kick_ghost(token)
+                if conflicts > 3:
+                    time.sleep(5)
+            else:
+                print("poll error:", exc)
+                time.sleep(5)
+            continue
         except Exception as exc:  # noqa: BLE001
             print("poll error:", exc)
             time.sleep(5)
@@ -114,9 +123,4 @@ def run() -> None:
 
 
 if __name__ == "__main__":
-    import sys
-
-    if "--once" in sys.argv:
-        poll_once()
-    else:
-        run()
+    run()

@@ -196,52 +196,6 @@ def cmd_email_digest(args) -> None:
             print("Qdrant not configured — skipping index.")
 
 
-def cmd_backfill_seen(args) -> None:
-    """Scan all store/raw/*.json chronologically and build the seen.json registry,
-    then re-index everything into Qdrant with correct first_seen values."""
-    config.load_env()
-    import json as _json
-    from pathlib import Path
-    from .models import Item
-    from .store import save_seen
-
-    raw = Path(config.STORE_DIR) / "raw"
-    if not raw.exists():
-        print("no store/raw directory found.")
-        return
-
-    seen: dict[str, str] = {}
-    all_items: list[Item] = []
-
-    for f in sorted(raw.glob("*.json")):
-        if f.name == "seen.json" or f.name == "gmail-archive.json":
-            continue
-        day_str = f.stem  # YYYY-MM-DD
-        try:
-            data = _json.loads(f.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            continue
-        for d in data:
-            item = Item.from_dict(d)
-            if item.key not in seen:
-                seen[item.key] = day_str
-            from dataclasses import replace
-            all_items.append(replace(item, first_seen=seen[item.key]))
-
-    save_seen(config.STORE_DIR, seen)
-    n_files = len(list(raw.glob("*.json"))) - 1  # exclude seen.json itself
-    print(f"built seen.json: {len(seen)} unique keys from {n_files} files")
-
-    from . import rag
-    if rag.configured():
-        rag.ensure_datetime_index()
-        print(f"re-indexing {len(all_items)} items with first_seen into Qdrant ...")
-        n = rag.index_items(all_items)
-        print(f"indexed {n} chunks.")
-    else:
-        print("Qdrant not configured — saved seen.json only.")
-
-
 def cmd_show(args) -> None:
     items = load_day(config.STORE_DIR, _today())
     if not items:
@@ -256,26 +210,20 @@ def cmd_synthesize(args) -> None:
     config.load_env()
     from .synthesize import claude_cli_available, synthesize, write_drafts
 
-    api_key = None
-    if args.backend == "cli":
-        if not claude_cli_available():
-            raise SystemExit(
-                "the `claude` CLI was not found. Install Claude Code and log in with "
-                "your subscription (or in CI, set CLAUDE_CODE_OAUTH_TOKEN from "
-                "`claude setup-token`). Or use --backend api with an ANTHROPIC_API_KEY."
-            )
-    else:  # api
-        api_key = config.anthropic_api_key()
-        if not api_key:
-            raise SystemExit("--backend api needs ANTHROPIC_API_KEY (copy .env.example to .env).")
+    if not claude_cli_available():
+        raise SystemExit(
+            "the `claude` CLI was not found. Install Claude Code and log in with "
+            "your subscription (or in CI, set CLAUDE_CODE_OAUTH_TOKEN from "
+            "`claude setup-token`)."
+        )
 
     items = load_day(config.STORE_DIR, _today())
     if not items:
         raise SystemExit("no collected items for today. run `collect` first.")
     print(f"synthesizing {args.n} drafts from {len(items)} items "
-          f"via {args.backend} ({config.synth_model()}) ...")
+          f"({config.synth_model()}) ...")
     drafts = synthesize(items, model=config.synth_model(), n_drafts=args.n,
-                        item_limit=args.item_limit, backend=args.backend, api_key=api_key)
+                        item_limit=args.item_limit)
     paths = write_drafts(drafts, args.out, _today(), spacing_days=args.spacing)
     print(f"wrote {len(paths)} draft(s) to {args.out}:")
     for p in paths:
@@ -353,8 +301,6 @@ def build_parser() -> argparse.ArgumentParser:
     y.add_argument("--n", type=int, default=5, help="number of drafts")
     y.add_argument("--item-limit", type=int, default=40, help="top items fed to the model")
     y.add_argument("--spacing", type=int, default=2, help="days between draft publish_dates")
-    y.add_argument("--backend", choices=("cli", "api"), default="cli",
-                   help="cli = your Claude subscription (default); api = pay-per-token key")
     y.set_defaults(func=cmd_synthesize)
 
     ck = sub.add_parser("check-ainews",
@@ -377,10 +323,6 @@ def build_parser() -> argparse.ArgumentParser:
                     help="max source chars to translate (full newsletter)")
     me.add_argument("--to", default="", help="recipient (default: DIGEST_EMAIL_TO env)")
     me.set_defaults(func=cmd_email_digest)
-
-    bf = sub.add_parser("backfill-seen",
-                         help="build seen.json from store history and re-index with first_seen")
-    bf.set_defaults(func=cmd_backfill_seen)
 
     d = sub.add_parser("digest", help="AINews-style thematic digest of today's signal")
     d.add_argument("--out", default="./digests", help="output dir for the digest .md")

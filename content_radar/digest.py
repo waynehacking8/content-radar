@@ -19,6 +19,7 @@ from typing import Iterable
 
 from .models import Item
 from .synthesize import run_claude_cli
+from .textutil import extract_json, items_block
 
 DIGEST_INSTRUCTIONS = """\
 You are the editor of a daily AI/dev intelligence digest (think AINews by smol.ai).
@@ -44,30 +45,13 @@ Return ONLY a JSON object (no prose around it):
 Pick top_by_engagement from the highest-scored items (max 8)."""
 
 
-def _items_block(items: Iterable[Item], limit: int) -> str:
-    lines = []
-    for i, it in enumerate(list(items)[:limit], 1):
-        snippet = (it.text or "").replace("\n", " ")[:240]
-        lines.append(
-            f"{i}. [{it.source} · score {it.score}] {it.title}\n"
-            f"   {it.url}\n   {snippet}"
-        )
-    return "\n".join(lines)
-
-
 def build_digest_prompt(items: Iterable[Item], max_themes: int, item_limit: int) -> str:
     instructions = DIGEST_INSTRUCTIONS.replace("{max_themes}", str(max_themes))
-    return f"{instructions}\n\n=== RAW SIGNAL ===\n{_items_block(items, item_limit)}"
+    return f"{instructions}\n\n=== RAW SIGNAL ===\n{items_block(items, item_limit, 240)}"
 
 
 def extract_json_object(text: str) -> dict:
-    text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```[a-zA-Z]*\n?|\n?```$", "", text).strip()
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1:
-        raise ValueError(f"no JSON object in model output: {text[:200]}")
-    return json.loads(text[start : end + 1])
+    return extract_json(text, "{")
 
 
 def synthesize_digest(items, *, model, max_themes=5, item_limit=60) -> dict:

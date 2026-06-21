@@ -2,10 +2,10 @@
 
 Long documents (newsletters like AINews) embed poorly as one vector and lose
 detail when truncated, so we split them into sentence-aware passages — each gets
-its own embedding. No overlap: a Jan-2026 systematic study (SPLADE / Natural
-Questions) found overlap gives no measurable retrieval benefit, only cost. The
-parent's title + date are prepended at index time (rag.py) as a cheap, free form
-of Anthropic's Contextual Retrieval.
+its own embedding, with a small ~10-15% overlap (CHUNK_OVERLAP) so a fact split
+across a passage boundary still lands whole in at least one chunk. The parent's
+title + date are prepended at index time (rag.py) as a cheap, free form of
+Anthropic's Contextual Retrieval.
 """
 from __future__ import annotations
 

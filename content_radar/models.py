@@ -10,7 +10,7 @@ import email.utils
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Iterable
 
 _RFC2822_LIKE = re.compile(r"^[A-Za-z]{3},\s")
 
@@ -77,3 +77,14 @@ class Item:
             first_seen=data.get("first_seen", ""),
             extra=dict(data.get("extra", {})),
         )
+
+
+def dedup_by_key(items: Iterable[Item]) -> list[Item]:
+    """Keep one Item per key — the highest score wins (ties: last seen). Preserves
+    first-occurrence order; callers sort if they need ranking."""
+    by_key: dict[str, Item] = {}
+    for it in items:
+        cur = by_key.get(it.key)
+        if cur is None or it.score >= cur.score:
+            by_key[it.key] = it
+    return list(by_key.values())

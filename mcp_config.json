@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "radar": {
-      "command": "python3",
-      "args": ["-m", "content_radar.mcp_server"]
-    }
-  }
-}

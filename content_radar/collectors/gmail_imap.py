@@ -96,13 +96,8 @@ def _resolve_urls_bulk(hrefs: set[str]) -> dict[str, str | None]:
     return resolved
 
 
-def _body_text_with_urls(msg) -> str:
-    """Extract body text from an email, preserving real URLs inline.
-
-    For HTML emails (e.g. Substack newsletters), resolves redirect URLs and
-    inlines them as `text (https://real-url)` so chunked text retains source
-    attribution for every story.
-    """
+def _html_and_text(msg) -> tuple[str, str]:
+    """Pull the first text/html and text/plain parts out of a MIME message."""
     html = text = ""
     for part in msg.walk():
         ctype = part.get_content_type()
@@ -114,7 +109,17 @@ def _body_text_with_urls(msg) -> str:
             html = decoded
         elif ctype == "text/plain" and not text:
             text = decoded
+    return html, text
 
+
+def _body_text_with_urls(msg) -> str:
+    """Extract body text from an email, preserving real URLs inline.
+
+    For HTML emails (e.g. Substack newsletters), resolves redirect URLs and
+    inlines them as `text (https://real-url)` so chunked text retains source
+    attribution for every story.
+    """
+    html, text = _html_and_text(msg)
     if not html:
         return _normalize(text)
 
@@ -141,17 +146,7 @@ def _body_text_with_urls(msg) -> str:
 
 def _body_text(msg) -> str:
     """Legacy fast path — strips URLs (used when max_chars is small)."""
-    html = text = ""
-    for part in msg.walk():
-        ctype = part.get_content_type()
-        payload = part.get_payload(decode=True)
-        if not payload:
-            continue
-        decoded = payload.decode(part.get_content_charset() or "utf-8", "ignore")
-        if ctype == "text/html" and not html:
-            html = decoded
-        elif ctype == "text/plain" and not text:
-            text = decoded
+    html, text = _html_and_text(msg)
     if html:
         soup = BeautifulSoup(html, "html.parser")
         for tag in soup(["script", "style"]):
