@@ -69,14 +69,45 @@ def _token() -> str:
     return token
 
 
+def _kick_ghost(token: str) -> None:
+    """Disconnect a ghost polling instance by briefly setting then deleting a
+    webhook — Telegram drops the other long-poll, clearing 409 conflicts."""
+    try:
+        requests.post(API.format(token=token, method="setWebhook"),
+                      data={"url": "https://example.com:443/x"}, timeout=10)
+        time.sleep(2)
+        requests.post(API.format(token=token, method="deleteWebhook"), timeout=10)
+        time.sleep(0.5)
+    except requests.RequestException:
+        pass
+
+
 def run() -> None:
-    """Continuous long-polling loop (for an always-on host)."""
+    """Continuous long-polling loop (for an always-on host).
+
+    Kicks any ghost instance on start and on 409 (Conflict: another getUpdates is
+    already running) so a stale process can't permanently block this one.
+    """
     token = _token()
     print("radar telegram bot polling... (Ctrl-C to stop)")
+    _kick_ghost(token)
     offset = None
+    conflicts = 0
     while True:
         try:
             resp = _call(token, "getUpdates", poll=60, offset=offset)
+            conflicts = 0
+        except requests.exceptions.HTTPError as exc:
+            if "409" in str(exc):
+                conflicts += 1
+                print(f"409 conflict (#{conflicts}), kicking ghost...")
+                _kick_ghost(token)
+                if conflicts > 3:
+                    time.sleep(5)
+            else:
+                print("poll error:", exc)
+                time.sleep(5)
+            continue
         except Exception as exc:  # noqa: BLE001
             print("poll error:", exc)
             time.sleep(5)

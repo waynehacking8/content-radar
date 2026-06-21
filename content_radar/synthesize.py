@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .models import Item
+from .textutil import extract_json, items_block
 
 VOICE = """\
 You write LinkedIn posts for an AI systems engineer pivoting to Solutions
@@ -38,32 +39,15 @@ Produce {n} drafts, each grounded in one or more of the items below. Prefer
 items that are genuinely interesting to a practitioner; skip noise."""
 
 
-def _items_digest(items: Iterable[Item], limit: int) -> str:
-    lines = []
-    for i, it in enumerate(list(items)[:limit], 1):
-        snippet = (it.text or "").replace("\n", " ")[:280]
-        lines.append(
-            f"{i}. [{it.source} · score {it.score}] {it.title}\n"
-            f"   {it.url}\n   {snippet}"
-        )
-    return "\n".join(lines)
-
-
 def build_prompt(items: Iterable[Item], n_drafts: int, item_limit: int) -> str:
     return (
         f"{VOICE}\n\n{SCHEMA_HINT.replace('{n}', str(n_drafts))}\n\n"
-        f"=== TRENDING ITEMS ===\n{_items_digest(items, item_limit)}"
+        f"=== TRENDING ITEMS ===\n{items_block(items, item_limit, 280)}"
     )
 
 
 def _extract_json(text: str) -> list[dict]:
-    text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```[a-zA-Z]*\n?|\n?```$", "", text).strip()
-    start, end = text.find("["), text.rfind("]")
-    if start == -1 or end == -1:
-        raise ValueError(f"no JSON array in model output: {text[:200]}")
-    return json.loads(text[start : end + 1])
+    return extract_json(text, "[")
 
 
 def claude_cli_available() -> bool:

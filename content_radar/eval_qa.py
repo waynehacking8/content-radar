@@ -7,12 +7,12 @@ Traditional Chinese) with an LLM-as-judge. Used to verify answer quality at scal
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 from . import config
 from .chat import answer
 from .synthesize import run_claude_cli
+from .textutil import extract_json
 
 GEN_PROMPT = """Generate {n} diverse questions (in Traditional Chinese) that a
 practitioner would ask an AI-news assistant whose knowledge base is ~600 days of
@@ -32,27 +32,15 @@ the topic is genuinely niche. Return ONLY JSON:
 {"score": <1-5>, "pass": <true if score>=4>, "issue": "<short reason>"}"""
 
 
-def _extract_array(text: str) -> list:
-    text = re.sub(r"^```[a-zA-Z]*\n?|\n?```$", "", text.strip())
-    s, e = text.find("["), text.rfind("]")
-    return json.loads(text[s:e + 1])
-
-
-def _extract_obj(text: str) -> dict:
-    text = re.sub(r"^```[a-zA-Z]*\n?|\n?```$", "", text.strip())
-    s, e = text.find("{"), text.rfind("}")
-    return json.loads(text[s:e + 1])
-
-
 def generate_questions(n: int, model: str) -> list[str]:
     out = run_claude_cli(GEN_PROMPT.replace("{n}", str(n)), model)
-    return _extract_array(out)
+    return extract_json(out, "[")
 
 
 def judge(question: str, ans: str, model: str) -> dict:
     out = run_claude_cli(f"{JUDGE_PROMPT}\n\nQUESTION:\n{question}\n\nANSWER:\n{ans}", model)
     try:
-        return _extract_obj(out)
+        return extract_json(out, "{")
     except (ValueError, json.JSONDecodeError):
         return {"score": 0, "pass": False, "issue": "judge parse error"}
 
