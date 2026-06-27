@@ -6,21 +6,20 @@ publish_date: 2026-06-29
 title: "no-mistakes-git-proxy"
 angle: tool-spotlight
 tags:
-  - GitWorkflow
-  - DeveloperExperience
-  - AITools
-  - CodeQuality
-  - SoftwareEngineering
+  - aiengineering
+  - devtools
+  - gitworkflow
+  - agentdrivendevelopment
 sources:
   - https://github.com/kunchenguid/no-mistakes
 ---
 
-A git proxy that runs an AI review before your push reaches origin. That's the whole pitch for no-mistakes, and it's a genuinely clever place to put a quality gate.
+Here's a pattern I hadn't seen before: a git proxy that sits between your local machine and your actual remote.
 
-The flow: you push to a local no-mistakes remote instead of origin. It spins up a disposable worktree, runs a validation pipeline, and only forwards the push if the code passes. Fail locally — before anything hits your team's repo.
+You push to `no-mistakes` instead of `origin`. It spins up a disposable worktree, runs an AI-driven validation pipeline over your changes, and only forwards the push if it passes. If something's wrong, the push fails locally — before your CI queue ever sees it.
 
-What I like is the level of intervention. Pre-commit hooks are easy to skip. CI catches issues late and wastes pipeline time. This sits in between: on your machine, before the push, opt-in per repo. The disposable worktree also means it tests a clean copy — not your working directory with stray debug logs still in.
+The project is open source and the goal is catching AI-generated slop before it becomes a PR for humans to review.
 
-Early project, rough edges, but the architecture reflects a real insight: put quality enforcement where the cost of failure is lowest. That principle applies well beyond git workflows.
+What I find interesting isn't the specific tool — it's the architectural instinct. As AI coding assistants generate more of our commits, the review surface shifts. You can't rely on "a human wrote this, so it's probably intentional." Pre-push gates that actually understand code are going to become standard tooling.
 
-#gitworkflow #developerexperience #aitools #codequality #softwareengineering
+This is one early version of what that looks like. The principle — interpose an AI quality check between generation and publication — will show up everywhere.
