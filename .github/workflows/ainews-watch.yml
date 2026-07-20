@@ -1,18 +1,13 @@
 name: ainews-watch
 
-# Forward AINews the moment it arrives — not at a fixed hour.
+# PAUSED: disabled in GitHub Actions with no automatic schedule. Manual dispatch
+# is retained only as a recovery path for an intentional future restart.
+
+# Retained implementation for forwarding AINews when explicitly restored. The
+# former Apps Script push and fallback cron cannot start it while the workflow is
+# disabled; there is deliberately no schedule in this file.
 #
-# The newsletter lands at an unpredictable time (~03:00–08:00 UTC / 11:00–16:00
-# Taipei). Two triggers feed this workflow:
-#
-#   PRIMARY — Google Apps Script push (scripts/ainews_trigger.gs): checks Gmail
-#   every 10 min on Google's reliable trigger and fires workflow_dispatch the
-#   moment an unforwarded issue exists. workflow_dispatch starts within seconds.
-#
-#   FALLBACK — the cron below. GitHub cron on this repo lags 3–6 hours behind
-#   schedule (measured), so it's only a safety net for the day Apps Script breaks.
-#
-# Either way the job is the same:
+# When manually restored, the job is:
 #
 #   1. Light check (~30s, stdlib + tiny deps): is there a fresh AINews that
 #      hasn't been forwarded yet?  Empty checks end here.
@@ -25,17 +20,12 @@ name: ainews-watch
 # idempotent — no state files, no duplicate sends.
 
 on:
-  schedule:
-    # Fallback only (see above): every 30 min, 02:00–09:30 UTC = 10:00–17:30
-    # Taipei. Expect these to fire hours late; the Apps Script push is what
-    # actually delivers "forward on arrival".
-    - cron: "*/30 2-9 * * *"
-  workflow_dispatch: {}    # fired by scripts/ainews_trigger.gs, or manually from the Actions tab
+  workflow_dispatch: {}
 
 permissions:
   contents: read
 
-# Never two forwards at once (a late cron run could overlap the next one).
+# Never two forwards at once.
 concurrency:
   group: ainews-watch
   cancel-in-progress: false

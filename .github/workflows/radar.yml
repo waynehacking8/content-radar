@@ -1,8 +1,11 @@
 name: content-radar
 
-# Runs on GitHub's servers (your laptop can be off). Collects signal, drafts
-# posts with Claude on YOUR subscription (no API key), and commits the drafts
-# to drafts/ for you to review from anywhere — including your phone.
+# PAUSED: disabled in GitHub Actions with no automatic schedule. Manual dispatch
+# is retained only as a recovery path for an intentional future restart.
+
+# Retained implementation for collecting signal and drafting posts with Claude.
+# It runs only if the disabled workflow is intentionally restored and manually
+# dispatched; there is deliberately no schedule while the project is paused.
 #
 # One-time setup:
 #   1. Locally:  claude setup-token   -> copies a 1-year subscription token
@@ -11,9 +14,7 @@ name: content-radar
 #        TWITTERAPI_IO_KEY, REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET (optional)
 
 on:
-  schedule:
-    - cron: "0 0 * * *"   # 00:00 UTC daily (08:00 Taipei)
-  workflow_dispatch: {}    # also runnable on-demand from the Actions tab
+  workflow_dispatch: {}
 
 permissions:
   contents: write

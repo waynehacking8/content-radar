@@ -1,5 +1,9 @@
 # content-radar
 
+> **Automation paused (2026-07-21).** All GitHub Actions workflows are disabled
+> and their scheduled triggers have been removed. The CLI and workflow bodies
+> remain available for explicit local use or a future intentional restart.
+
 Collect trending **AI / dev** signal from multiple sources, build a **vector
 knowledge base** from it, and serve three things off that KB: an AINews-style
 daily **digest**, review-ready post **drafts**, and a **Traditional-Chinese chat
@@ -20,10 +24,9 @@ BM25 sparse + jina cross-encoder rerank, vectors in Qdrant Cloud); **all generat
 runs on Claude Sonnet** via the `claude` CLI subscription. Nothing is ever
 auto-published — posts are **drafts** (`status: draft`) for a human to approve.
 
-**Each day's collected signal is embedded and upserted into the KB automatically**
-(the `index` step in the daily workflow), so the knowledge base grows every day and
-the bot/digest always see the latest news. Re-runs are idempotent (deterministic
-point IDs dedup).
+When the retained workflow is run explicitly, that day's collected signal is
+embedded and upserted into the KB. Re-runs are idempotent (deterministic point IDs
+dedup). While automation is paused, the KB does not update by itself.
 
 ## Why these sources
 
@@ -126,26 +129,20 @@ question, it falls back to **WebSearch** and attributes the web sources.
 
 > 完整問答(含 Opus 4.8、Speculative Decoding 等)直接 DM 機器人即可;每題回答都帶日期與來源,KB 不足時自動補網路來源。
 
-## Automation (runs with your laptop off)
+## Automation (paused)
 
-Two workflows run on GitHub's servers, both authenticating with **your
-subscription**, not an API key:
+The workflow implementations are retained, but all are disabled in GitHub
+Actions and none has a `schedule` trigger. If intentionally restarted, they use
+**your subscription**, not an API key:
 
-- **`.github/workflows/radar.yml`** — daily at 08:00 Taipei: collect → enrich →
-  index → digest → drafts, committed back to the repo for review.
-- **`.github/workflows/ainews-watch.yml`** — AINews lands at an unpredictable
-  time (11:00–16:00 Taipei). The moment a fresh issue shows up, this translates
-  it to 繁中, prepends a one-glance **本期摘要** (whole-email TL;DR — a one-line lede
-  plus 3–6 bullets), emails it, and indexes it into the KB. Dedup lives in Gmail (a
-  `radar-forwarded` label on processed mail), so runs are idempotent — empty
-  checks finish in ~30s without installing the heavy stack.
+- **`.github/workflows/radar.yml`** — retained collect → enrich → index → digest →
+  drafts pipeline; no schedule.
+- **`.github/workflows/ainews-watch.yml`** — retained AINews translation,
+  forwarding, and indexing pipeline. If deliberately restored and dispatched
+  against a fresh issue, dedup lives in Gmail via the `radar-forwarded` label.
 
-  **How it gets triggered on time:** GitHub cron is best-effort and can lag
-  hours behind schedule, so the punctual trigger is
-  **`scripts/ainews_trigger.gs`** — a ~60-line Google Apps Script that checks
-  Gmail natively every 10 min and fires `workflow_dispatch` (which starts
-  within seconds) when an unforwarded issue exists. The workflow's own cron
-  stays as a delayed fallback. Setup steps are in the header of the `.gs` file.
+  The former `scripts/ainews_trigger.gs` push and GitHub cron are inactive while
+  the workflow is disabled; dispatch attempts cannot start a run.
 
 Setup:
 
@@ -153,7 +150,7 @@ Setup:
    monthly Pro/Max).
 2. Repo → Settings → Secrets and variables → Actions → add `CLAUDE_CODE_OAUTH_TOKEN`
    (and optionally `TWITTERAPI_IO_KEY`, `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`).
-3. Trigger them from the Actions tab, or wait for the schedules.
+3. Re-enable and manually dispatch only if intentionally restarting the project.
 
 Each draft is a Markdown file with YAML front matter:
 
@@ -214,7 +211,7 @@ content_radar/
   eval_qa.py           # LLM-as-judge QA harness (generate questions, score answers)
   cli.py               # collect / show / enrich / index / import / digest / synthesize / check-ainews / email-digest / eval
 scripts/
-  ainews_trigger.gs    # Google Apps Script: punctual Gmail check → workflow_dispatch (GH cron is hours late)
+  ainews_trigger.gs    # former Gmail → workflow_dispatch trigger (workflow currently disabled)
 tests/                 # 95 tests (python -m pytest)
 ```
 
@@ -228,8 +225,8 @@ tests/                 # 95 tests (python -m pytest)
 | Run N pipelines, pick the best | `--best-of N` |
 | Searchable archive of every past issue | **Qdrant vector KB** (`rag.py`) — every day's signal auto-indexed |
 | Ask it anything, grounded | **繁中 chat bot** (`chat.py` + `telegram_bot.py`), RAG + WebSearch fallback |
-| Daily, automated | GitHub Actions on your subscription |
-| Lands in your inbox when it's fresh | `watch.py` + `ainews-watch.yml` + Apps Script push: forwarded (繁中) within ~10 min of arrival |
+| Automation | Paused; retained workflows have no schedules |
+| AINews forwarding | Paused; retained implementation is idempotent when explicitly restored |
 
 ## Design notes
 
@@ -238,7 +235,7 @@ tests/                 # 95 tests (python -m pytest)
 - **Idempotent store.** Re-collecting the same day dedups by `source:id` and
   keeps the higher score.
 - **Human in the loop by construction.** Synthesis only ever writes `draft`s.
-- **The KB grows by itself.** Each daily run embeds that day's signal (incl. the
+- **The KB can grow incrementally.** Each explicit run embeds that day's signal (incl. the
   day's AINews) into Qdrant; deterministic point IDs make re-indexing idempotent.
 - **Two cost layers.** Retrieval (fastembed + Qdrant free tier) is local and free;
   only Claude generation uses your subscription. No per-token API billing.

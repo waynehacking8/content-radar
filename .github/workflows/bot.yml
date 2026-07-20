@@ -1,13 +1,13 @@
 name: radar-bot
 
-# Near-instant Telegram bot with NO server. A long-polling job answers messages
-# in real time; GitHub restarts it every 6h (jobs cap at 6h). Public-repo Actions
-# minutes are free/unlimited. A new run cancels the old one for a clean handoff.
-# Answers run on your Claude subscription, grounded in the day's collected signal.
+# PAUSED: disabled in GitHub Actions with no automatic schedule. Manual dispatch
+# is retained only as a recovery path for an intentional future restart.
+
+# Retained implementation of the serverless Telegram bot. If intentionally
+# restored and manually dispatched, it long-polls for up to ~5h40m; there is no
+# automatic restart while the project is paused.
 
 on:
-  schedule:
-    - cron: "0 */6 * * *"     # restart every 6 hours
   workflow_dispatch: {}
 
 permissions:
