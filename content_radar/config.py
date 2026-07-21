@@ -17,8 +17,8 @@ DIGESTS_DIR = ROOT / "digests"
 ENV_FILE = ROOT / ".env"
 
 # Trusted senders for swyx's AINews newsletter. Requiring a sender prevents
-# unrelated messages such as Apps Script failure summaries (whose subjects can
-# also contain "AINews") from entering the collector or forwarding pipeline.
+# unrelated automation notifications whose subjects also contain "AINews" from
+# entering the collector or forwarding pipeline.
 DEFAULT_AINEWS_SENDERS = (
     "swyx+ainews@substack.com",
     "news@smol.ai",

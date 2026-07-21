@@ -2,7 +2,7 @@ name: ainews-watch
 
 # GitHub Actions is the only scheduler for AINews forwarding. It runs once a day
 # after the newsletter's usual arrival window; workflow_dispatch is retained for
-# an occasional manual retry. There is no external Apps Script trigger.
+# an occasional manual retry.
 #
 # Each run is:
 #

@@ -37,7 +37,7 @@ def test_ainews_watch_query_is_fresh_and_dedup_aware_by_default(monkeypatch):
 
 
 def test_ainews_query_requires_a_known_newsletter_sender():
-    """A subject-only query also matches Apps Script failure notifications."""
+    """A subject-only query also matches unrelated automation notifications."""
     q = config.DEFAULT_AINEWS_QUERY
     assert "subject:AINews" in q
     assert "from:" in q
