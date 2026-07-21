@@ -285,7 +285,8 @@ def build_parser() -> argparse.ArgumentParser:
     ix.set_defaults(func=cmd_index)
 
     im = sub.add_parser("import", help="import a Gmail newsletter archive (e.g. all AINews) into the KB")
-    im.add_argument("--query", default="subject:AINews", help="Gmail-syntax search")
+    im.add_argument("--query", default=config.DEFAULT_AINEWS_QUERY,
+                    help="Gmail-syntax search")
     im.add_argument("--limit", type=int, default=1000, help="max emails to fetch")
     im.set_defaults(func=cmd_import)
 

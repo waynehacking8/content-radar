@@ -27,11 +27,21 @@ def test_ainews_watch_query_is_fresh_and_dedup_aware_by_default(monkeypatch):
     monkeypatch.delenv("AINEWS_FORWARDED_LABEL", raising=False)
     q = config.ainews_watch_query()
     assert "subject:AINews" in q
+    for sender in config.DEFAULT_AINEWS_SENDERS:
+        assert f"from:{sender}" in q
     # Window must be wider than 1 day so a broken trigger can catch up next day,
     # and must come from config (no hardcoded duplicates drifting apart).
     assert f"newer_than:{config.AINEWS_FRESH_WINDOW}" in q
     assert config.AINEWS_FRESH_WINDOW != "1d"
     assert f"-label:{config.DEFAULT_AINEWS_FORWARDED_LABEL}" in q  # skip already-forwarded
+
+
+def test_ainews_query_requires_a_known_newsletter_sender():
+    """A subject-only query also matches Apps Script failure notifications."""
+    q = config.DEFAULT_AINEWS_QUERY
+    assert "subject:AINews" in q
+    assert "from:" in q
+    assert "Summary of failures" not in q
 
 
 def test_ainews_watch_query_env_override(monkeypatch):

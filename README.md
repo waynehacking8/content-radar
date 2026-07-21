@@ -15,7 +15,7 @@ collectors ──▶ dated JSON store (dedup) ──▶ │
         │                                   │
         └──▶ enrich (full text) ──▶ Qdrant  ├──▶ Telegram chat bot (繁中, RAG + WebSearch)
              vector KB (e5 + BM25 + rerank) │
-                                            └──▶ AINews → 繁中 email + 本期摘要 (forwarded on arrival)
+                                            └──▶ AINews → 繁中 email + 本期摘要 (daily at 18:00 Taipei)
 ```
 
 Two model layers: **retrieval runs locally for free** (fastembed: e5-large dense +
@@ -203,7 +203,7 @@ content_radar/
   chat.py              # RAG chat: retrieve → answer in 繁中, WebSearch fallback on KB gaps
   telegram_bot.py      # long-poll Telegram bot over chat.py (serverless, no own host)
   mailer.py            # Gmail SMTP: 繁中 AINews edition
-  watch.py             # AINews watcher: forward on arrival, dedup via Gmail label
+  watch.py             # daily AINews watcher, dedup via Gmail label
   eval_qa.py           # LLM-as-judge QA harness (generate questions, score answers)
   cli.py               # collect / show / enrich / index / import / digest / synthesize / check-ainews / email-digest / eval
 tests/                 # 95 tests (python -m pytest)

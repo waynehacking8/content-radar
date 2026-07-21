@@ -16,6 +16,18 @@ STORE_DIR = ROOT / "store"
 DIGESTS_DIR = ROOT / "digests"
 ENV_FILE = ROOT / ".env"
 
+# Trusted senders for swyx's AINews newsletter. Requiring a sender prevents
+# unrelated messages such as Apps Script failure summaries (whose subjects can
+# also contain "AINews") from entering the collector or forwarding pipeline.
+DEFAULT_AINEWS_SENDERS = (
+    "swyx+ainews@substack.com",
+    "news@smol.ai",
+)
+DEFAULT_AINEWS_QUERY = (
+    "{" + " ".join(f"from:{sender}" for sender in DEFAULT_AINEWS_SENDERS) + "} "
+    "subject:AINews"
+)
+
 
 def load_env() -> None:
     load_dotenv(ENV_FILE)
@@ -47,7 +59,7 @@ class Interests:
     # Gmail search (Gmail syntax) for AI-news newsletters to fold in. Needs
     # GMAIL_USER + GMAIL_APP_PASSWORD. Targets swyx's AINews (smol.ai) — the
     # gold-standard expert-curated AI digest. Add more senders as needed.
-    gmail_query: str = '(from:swyx+ainews@substack.com OR subject:AINews) newer_than:4d'
+    gmail_query: str = f"{DEFAULT_AINEWS_QUERY} newer_than:4d"
     # Minimum score to keep an item (per-source floors).
     min_score: dict[str, int] = field(
         default_factory=lambda: {
@@ -89,9 +101,6 @@ def digest_email_to() -> str:
     return os.environ.get("DIGEST_EMAIL_TO", DEFAULT_DIGEST_EMAIL_TO).strip() or DEFAULT_DIGEST_EMAIL_TO
 
 
-# Default Gmail search for "the latest AINews issue" (the email-digest command).
-DEFAULT_AINEWS_QUERY = "subject:AINews"
-
 # ── AINews watcher ───────────────────────────────────────────────────────────
 # A daily GitHub Actions workflow (.github/workflows/ainews-watch.yml) checks
 # after the newsletter's usual arrival window. Dedup state lives in Gmail itself:
@@ -115,7 +124,7 @@ def ainews_forwarded_label() -> str:
 
 def ainews_watch_query() -> str:
     """Gmail search for 'a fresh AINews that has not been forwarded yet'."""
-    default = (f"subject:AINews newer_than:{AINEWS_FRESH_WINDOW} "
+    default = (f"{DEFAULT_AINEWS_QUERY} newer_than:{AINEWS_FRESH_WINDOW} "
                f"-label:{ainews_forwarded_label()}")
     return os.environ.get("AINEWS_WATCH_QUERY", default).strip() or default
 

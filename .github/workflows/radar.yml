@@ -76,9 +76,8 @@ jobs:
         # --enrich: fetch article text for top links; --best-of: pick best of N
         run: python -m content_radar.cli digest --out digests --themes 5 --enrich 12 --best-of 2
 
-      # NOTE: AINews forwarding moved to ainews-watch.yml — the newsletter lands
-      # at 11:00–16:00 Taipei, long after this 08:00 run, so a fixed-hour forward
-      # could only ever send yesterday's issue. The watcher forwards on arrival.
+      # NOTE: AINews forwarding moved to ainews-watch.yml, which checks once
+      # daily at 18:00 Taipei after the usual newsletter arrival window.
 
       - name: Synthesize post drafts (Claude on subscription)
         env:
