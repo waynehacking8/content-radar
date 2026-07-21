@@ -93,9 +93,8 @@ def digest_email_to() -> str:
 DEFAULT_AINEWS_QUERY = "subject:AINews"
 
 # ── AINews watcher ───────────────────────────────────────────────────────────
-# The newsletter lands at an unpredictable time (~03:00–08:00 UTC / 11:00–16:00
-# Taipei), so a polling workflow (.github/workflows/ainews-watch.yml) forwards
-# it on arrival instead of at a fixed hour. Dedup state lives in Gmail itself:
+# A daily GitHub Actions workflow (.github/workflows/ainews-watch.yml) checks
+# after the newsletter's usual arrival window. Dedup state lives in Gmail itself:
 # a successful forward labels the original mail, and the watch query excludes
 # that label — every poll is idempotent, no state files.
 DEFAULT_AINEWS_FORWARDED_LABEL = "radar-forwarded"
@@ -104,8 +103,8 @@ DEFAULT_AINEWS_FORWARDED_LABEL = "radar-forwarded"
 ZH_SUBJECT_SUFFIX = " — 中文版"
 
 # How far back the watcher looks for an unforwarded issue. Wider than 1 day so
-# a broken trigger (expired PAT, Apps Script outage) can still catch up the
-# next day — the radar-forwarded label, not this window, prevents re-sends.
+# a delayed or failed daily run can catch up the next day — the radar-forwarded
+# label, not this window, prevents re-sends.
 AINEWS_FRESH_WINDOW = "2d"
 
 

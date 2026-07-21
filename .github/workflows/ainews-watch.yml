@@ -1,13 +1,10 @@
 name: ainews-watch
 
-# PAUSED: disabled in GitHub Actions with no automatic schedule. Manual dispatch
-# is retained only as a recovery path for an intentional future restart.
-
-# Retained implementation for forwarding AINews when explicitly restored. The
-# former Apps Script push and fallback cron cannot start it while the workflow is
-# disabled; there is deliberately no schedule in this file.
+# GitHub Actions is the only scheduler for AINews forwarding. It runs once a day
+# after the newsletter's usual arrival window; workflow_dispatch is retained for
+# an occasional manual retry. There is no external Apps Script trigger.
 #
-# When manually restored, the job is:
+# Each run is:
 #
 #   1. Light check (~30s, stdlib + tiny deps): is there a fresh AINews that
 #      hasn't been forwarded yet?  Empty checks end here.
@@ -20,6 +17,9 @@ name: ainews-watch
 # idempotent — no state files, no duplicate sends.
 
 on:
+  schedule:
+    # 18:00 Asia/Taipei. Exact delivery time is intentionally not a requirement.
+    - cron: "0 10 * * *"
   workflow_dispatch: {}
 
 permissions:

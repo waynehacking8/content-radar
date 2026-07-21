@@ -1,8 +1,7 @@
 # content-radar
 
-> **Automation paused (2026-07-21).** All GitHub Actions workflows are disabled
-> and their scheduled triggers have been removed. The CLI and workflow bodies
-> remain available for explicit local use or a future intentional restart.
+> **Automation status (2026-07-21).** AINews forwarding runs once daily in
+> GitHub Actions. The broader radar and Telegram bot workflows remain paused.
 
 Collect trending **AI / dev** signal from multiple sources, build a **vector
 knowledge base** from it, and serve three things off that KB: an AINews-style
@@ -24,9 +23,9 @@ BM25 sparse + jina cross-encoder rerank, vectors in Qdrant Cloud); **all generat
 runs on Claude Sonnet** via the `claude` CLI subscription. Nothing is ever
 auto-published — posts are **drafts** (`status: draft`) for a human to approve.
 
-When the retained workflow is run explicitly, that day's collected signal is
-embedded and upserted into the KB. Re-runs are idempotent (deterministic point IDs
-dedup). While automation is paused, the KB does not update by itself.
+AINews issues are embedded and upserted into the KB by the daily forwarding
+workflow. Re-runs are idempotent (deterministic point IDs dedup). The broader
+radar collector remains paused, so its other sources do not update by themselves.
 
 ## Why these sources
 
@@ -129,20 +128,17 @@ question, it falls back to **WebSearch** and attributes the web sources.
 
 > 完整問答(含 Opus 4.8、Speculative Decoding 等)直接 DM 機器人即可;每題回答都帶日期與來源,KB 不足時自動補網路來源。
 
-## Automation (paused)
+## Automation
 
-The workflow implementations are retained, but all are disabled in GitHub
-Actions and none has a `schedule` trigger. If intentionally restarted, they use
-**your subscription**, not an API key:
+Automation uses GitHub Actions only and authenticates with **your subscription**,
+not an API key:
 
 - **`.github/workflows/radar.yml`** — retained collect → enrich → index → digest →
-  drafts pipeline; no schedule.
-- **`.github/workflows/ainews-watch.yml`** — retained AINews translation,
-  forwarding, and indexing pipeline. If deliberately restored and dispatched
-  against a fresh issue, dedup lives in Gmail via the `radar-forwarded` label.
-
-  The former `scripts/ainews_trigger.gs` push and GitHub cron are inactive while
-  the workflow is disabled; dispatch attempts cannot start a run.
+  drafts pipeline; paused with no schedule.
+- **`.github/workflows/ainews-watch.yml`** — active once daily at 18:00 Taipei.
+  It checks for a fresh AINews issue, translates and forwards it, then indexes it.
+  Dedup lives in Gmail via the `radar-forwarded` label. Empty checks stop before
+  installing the heavy dependencies.
 
 Setup:
 
@@ -150,7 +146,7 @@ Setup:
    monthly Pro/Max).
 2. Repo → Settings → Secrets and variables → Actions → add `CLAUDE_CODE_OAUTH_TOKEN`
    (and optionally `TWITTERAPI_IO_KEY`, `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`).
-3. Re-enable and manually dispatch only if intentionally restarting the project.
+3. Use `workflow_dispatch` from the Actions tab only when a manual retry is needed.
 
 Each draft is a Markdown file with YAML front matter:
 
@@ -210,8 +206,6 @@ content_radar/
   watch.py             # AINews watcher: forward on arrival, dedup via Gmail label
   eval_qa.py           # LLM-as-judge QA harness (generate questions, score answers)
   cli.py               # collect / show / enrich / index / import / digest / synthesize / check-ainews / email-digest / eval
-scripts/
-  ainews_trigger.gs    # former Gmail → workflow_dispatch trigger (workflow currently disabled)
 tests/                 # 95 tests (python -m pytest)
 ```
 
@@ -225,8 +219,8 @@ tests/                 # 95 tests (python -m pytest)
 | Run N pipelines, pick the best | `--best-of N` |
 | Searchable archive of every past issue | **Qdrant vector KB** (`rag.py`) — every day's signal auto-indexed |
 | Ask it anything, grounded | **繁中 chat bot** (`chat.py` + `telegram_bot.py`), RAG + WebSearch fallback |
-| Automation | Paused; retained workflows have no schedules |
-| AINews forwarding | Paused; retained implementation is idempotent when explicitly restored |
+| Automation | GitHub Actions only; broader radar and bot workflows remain paused |
+| AINews forwarding | Daily at 18:00 Taipei; Gmail-label dedup makes retries idempotent |
 
 ## Design notes
 

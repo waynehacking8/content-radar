@@ -1,9 +1,8 @@
-"""AINews watcher — forward the newsletter when it arrives, not at a fixed hour.
+"""AINews watcher — forward the newest unprocessed newsletter.
 
-AINews lands at an unpredictable time (~03:00–08:00 UTC / 11:00–16:00 Taipei),
-and GitHub Actions can't subscribe to Gmail pushes. So a scheduled workflow
-(.github/workflows/ainews-watch.yml) polls cheaply through the arrival window
-and forwards the moment a fresh issue shows up.
+The scheduled GitHub Actions workflow (.github/workflows/ainews-watch.yml)
+checks once daily after the usual arrival window. A missing issue is a cheap
+no-op; a delayed issue remains eligible on the next day's run.
 
 All dedup state lives in Gmail itself: a successful forward applies
 config.ainews_forwarded_label() to the original mail, and the watch query
